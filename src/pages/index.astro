@@ -2,27 +2,29 @@
 import Layout from '../layouts/Layout.astro';
 ---
 
-<Layout title="Abhilash HP — Software Engineer" description="Software engineer, builder, and creator.">
+<Layout
+    title="Abhilash Honnavalli Puttaiah — Security Product Engineer"
+    description="Security Product Engineer at Akamai. Building next-gen bot detection platforms. 10+ years across engineering, architecture, and fraud prevention."
+>
     <nav>
         <span class="nav-brand">iamabhilash.in</span>
         <div class="nav-links">
             <a href="/tools">Tools</a>
-            <a href="https://github.com/abhilashhp" target="_blank" rel="noopener">GitHub</a>
-            <a href="https://linkedin.com/in/abhilashhp" target="_blank" rel="noopener">LinkedIn</a>
+            <a href="https://github.com/abilashhp" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://linkedin.com/in/abilashhp" target="_blank" rel="noopener">LinkedIn</a>
         </div>
     </nav>
 
     <main>
         <section class="hero">
-            <h1>Abhilash HP</h1>
-            <!-- TODO: Update your title below -->
-            <p class="title">Software Engineer</p>
-            <!-- TODO: Write a 1–2 line tagline about yourself -->
+            <h1>Abhilash Honnavalli Puttaiah</h1>
+            <p class="title">Security Product Engineer · Akamai Technologies</p>
             <p class="tagline">
-                I build things for the web. Passionate about clean code, developer tooling, and solving real problems.
+                I build systems that decide — in milliseconds — whether a request to your website
+                is a human or a bot. 10+ years at Akamai across engineering, architecture, and
+                fraud prevention. Based in Bengaluru.
             </p>
             <div class="hero-actions">
-                <!-- Make sure you add your resume as public/resume.pdf -->
                 <a href="/resume.pdf" download class="btn btn-primary">↓ Download Resume</a>
                 <a href="/tools" class="btn btn-secondary">View Tools →</a>
             </div>
@@ -31,12 +33,21 @@ import Layout from '../layouts/Layout.astro';
         <section class="section">
             <h2>About</h2>
             <div class="divider"></div>
-            <!-- TODO: Replace with your actual bio -->
             <p class="body-text">
-                Hi, I'm Abhilash — a software engineer based in [Your City]. I enjoy building tools that make developers' lives easier, working across the full stack, and shipping things that matter.
+                For the last 4 years I've been an engineer inside Akamai's Bot Manager — used by
+                some of the world's largest banks, retailers, and media companies. One system I
+                built is the <strong>Scraper Score</strong> detection engine, which flags evasive
+                bots based on request-level signals before they ever touch your data.
             </p>
             <p class="body-text">
-                When I'm not writing code, you'll find me [your hobbies / interests].
+                Before that, 6 years as a Solutions Architect — so I understand both how the
+                technology works <em>and</em> what a customer actually needs from it. That
+                combination is rare in pure engineering roles.
+            </p>
+            <p class="body-text">
+                Currently open to <strong>Security Architect</strong>, <strong>Security Product
+                Engineer</strong>, and <strong>Technical Product Manager</strong> roles where the
+                problem is hard and the stakes are real.
             </p>
         </section>
 
@@ -44,56 +55,201 @@ import Layout from '../layouts/Layout.astro';
             <h2>Experience</h2>
             <div class="divider"></div>
             <div class="experience-list">
-                <!-- TODO: Replace with your actual experience. Copy this block for each role. -->
+
                 <div class="experience-item">
-                    <div class="experience-header">
-                        <div>
-                            <span class="role">Senior Software Engineer</span>
-                            <span class="company"> · Company Name</span>
-                        </div>
-                        <span class="duration">2022 – Present</span>
+                    <div class="company-block">
+                        <span class="company-name">Akamai Technologies</span>
+                        <span class="company-tenure">10 years 6 months</span>
                     </div>
-                    <ul class="experience-bullets">
-                        <li>Built and maintained X, resulting in Y improvement.</li>
-                        <li>Led a team of N engineers to deliver Z feature on time.</li>
-                    </ul>
+
+                    <div class="role-block">
+                        <div class="experience-header">
+                            <div>
+                                <span class="role">Senior Software Engineer II</span>
+                                <span class="location"> · Bengaluru</span>
+                            </div>
+                            <span class="duration">Jun 2022 – Present</span>
+                        </div>
+                        <ul class="experience-bullets">
+                            <li>Built the <strong>Scraper Score</strong> detection system for Akamai Content Protector — classifying evasive bots via request-level signals before data exfiltration, protecting clients generating billions in annual revenue.</li>
+                            <li>Architected the edge security metadata layer powering real-time bot detection across <strong>200M+ daily requests</strong>, reducing detection-to-route latency by ~35%.</li>
+                            <li>Designed a DNS load balancer for Bot Manager's backend fleet achieving <strong>99.99% uptime</strong>, eliminating single-point-of-failure risk for Fortune 500 fraud-prevention infrastructure.</li>
+                            <li>Drove 100% on-time migration of <strong>21 enterprise customers</strong> to production beta with zero SLA breaches, reducing post-migration support volume by ~40%.</li>
+                        </ul>
+                    </div>
+
+                    <div class="role-block">
+                        <div class="experience-header">
+                            <div>
+                                <span class="role">Senior Solutions Architect</span>
+                                <span class="location"> · Bengaluru</span>
+                            </div>
+                            <span class="duration">Jul 2020 – May 2022</span>
+                        </div>
+                        <ul class="experience-bullets">
+                            <li>Implemented Akamai-as-Code frameworks for 10+ enterprise customers, embedding CDN configuration into CI/CD pipelines and cutting deployment turnaround by ~30%.</li>
+                            <li>Served as SME across 3 internal product-scaling initiatives, delivering structured beta feedback that shaped feature prioritisation and accelerated product readiness.</li>
+                        </ul>
+                    </div>
+
+                    <div class="role-block">
+                        <div class="experience-header">
+                            <div>
+                                <span class="role">Solutions Architect II</span>
+                                <span class="location"> · Bengaluru</span>
+                            </div>
+                            <span class="duration">Feb 2018 – Jun 2020</span>
+                        </div>
+                        <ul class="experience-bullets">
+                            <li>Owned end-to-end technical integration for 20+ enterprise accounts on Akamai's Web Performance and Security platform — maintaining a <strong>zero failed go-live</strong> record.</li>
+                            <li>Led pre-sales architecture engagements for 15+ APAC enterprise accounts, contributing directly to regional quota attainment.</li>
+                        </ul>
+                    </div>
+
+                    <div class="role-block">
+                        <div class="experience-header">
+                            <div>
+                                <span class="role">Solutions Architect</span>
+                                <span class="location"> · Bengaluru</span>
+                            </div>
+                            <span class="duration">Jan 2016 – Jan 2018</span>
+                        </div>
+                        <ul class="experience-bullets">
+                            <li>Managed onboarding and post-go-live support for 20+ enterprise accounts, building the cross-functional delivery skills that led to the SA II promotion in 2018.</li>
+                        </ul>
+                    </div>
                 </div>
 
                 <div class="experience-item">
-                    <div class="experience-header">
-                        <div>
-                            <span class="role">Software Engineer</span>
-                            <span class="company"> · Previous Company</span>
-                        </div>
-                        <span class="duration">2020 – 2022</span>
+                    <div class="company-block">
+                        <span class="company-name">BT (British Telecom)</span>
                     </div>
-                    <ul class="experience-bullets">
-                        <li>Describe your key contribution here.</li>
-                        <li>Another bullet point about impact or technology used.</li>
-                    </ul>
+                    <div class="role-block">
+                        <div class="experience-header">
+                            <div>
+                                <span class="role">Consultant</span>
+                                <span class="location"> · Belfast</span>
+                            </div>
+                            <span class="duration">May 2015 – Aug 2015</span>
+                        </div>
+                        <ul class="experience-bullets">
+                            <li>Delivered <strong>£3M in infrastructure cost savings</strong> by migrating 500+ enterprise clients from legacy Sentry API gateway to the Vordel cloud platform — zero downtime in 4 months through meticulous cutover planning and continuous C-suite stakeholder engagement.</li>
+                        </ul>
+                    </div>
                 </div>
+
+                <div class="experience-item">
+                    <div class="company-block">
+                        <span class="company-name">Tech Mahindra</span>
+                        <span class="company-tenure">3 years 9 months</span>
+                    </div>
+                    <div class="role-block">
+                        <div class="experience-header">
+                            <div>
+                                <span class="role">Design & Development Engineer</span>
+                                <span class="location"> · Bengaluru</span>
+                            </div>
+                            <span class="duration">Feb 2014 – Jan 2016</span>
+                        </div>
+                        <ul class="experience-bullets">
+                            <li>Delivered end-to-end API gateway implementations across 3 industry verticals, owning full-cycle policy development, SSL/TLS security setup, and production support with zero post-deployment incidents.</li>
+                        </ul>
+                    </div>
+                    <div class="role-block">
+                        <div class="experience-header">
+                            <div>
+                                <span class="role">Software Engineer</span>
+                                <span class="location"> · Bengaluru</span>
+                            </div>
+                            <span class="duration">May 2012 – Jan 2014</span>
+                        </div>
+                        <ul class="experience-bullets">
+                            <li>Designed functional and non-functional test strategies for enterprise applications; applied Agile/SCRUM methodologies across the full software delivery lifecycle.</li>
+                        </ul>
+                    </div>
+                </div>
+
             </div>
         </section>
 
         <section class="section">
             <h2>Skills</h2>
             <div class="divider"></div>
-            <!-- TODO: Update with your actual skills -->
             <div class="skills">
+                <span class="skill">Bot Detection & Prevention</span>
+                <span class="skill">Fraud Prevention Engineering</span>
+                <span class="skill">DNS Architecture</span>
+                <span class="skill">Edge Security (CDN)</span>
+                <span class="skill">API Gateway</span>
+                <span class="skill">SSL / TLS</span>
+                <span class="skill">Cloud Migration</span>
+                <span class="skill">Azure</span>
+                <span class="skill">CI/CD</span>
                 <span class="skill">Python</span>
-                <span class="skill">JavaScript</span>
-                <span class="skill">TypeScript</span>
-                <span class="skill">React</span>
-                <span class="skill">Node.js</span>
-                <span class="skill">Docker</span>
-                <span class="skill">PostgreSQL</span>
-                <span class="skill">Git</span>
+                <span class="skill">Solutions Architecture</span>
+                <span class="skill">Agile / SCRUM</span>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Education</h2>
+            <div class="divider"></div>
+            <div class="experience-list">
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div>
+                            <span class="role">M.S. — Telecommunications & Software Engineering</span>
+                            <span class="company"> · BITS Pilani</span>
+                        </div>
+                        <span class="duration">2013 – 2015</span>
+                    </div>
+                </div>
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div>
+                            <span class="role">B.E. — Telecommunications Engineering</span>
+                            <span class="company"> · Visvesvaraya Technological University</span>
+                        </div>
+                        <span class="duration">2007 – 2011</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Certifications & Awards</h2>
+            <div class="divider"></div>
+            <div class="awards">
+                <div class="award-item">
+                    <span class="award-icon">🏆</span>
+                    <div>
+                        <span class="award-name">Akamai STG Thunder Clap Award</span>
+                    </div>
+                </div>
+                <div class="award-item">
+                    <span class="award-icon">🥈</span>
+                    <div>
+                        <span class="award-name">Webex Bot Hackathon — Runner Up II (2025)</span>
+                    </div>
+                </div>
+                <div class="award-item">
+                    <span class="award-icon">☁️</span>
+                    <div>
+                        <span class="award-name">Microsoft Certified: Azure Fundamentals</span>
+                    </div>
+                </div>
+                <div class="award-item">
+                    <span class="award-icon">⭐</span>
+                    <div>
+                        <span class="award-name">Multiple Spot Awards — Akamai (FY16, FY18)</span>
+                    </div>
+                </div>
             </div>
         </section>
     </main>
 
     <footer>
-        <p>© {new Date().getFullYear()} Abhilash HP · <a href="mailto:your@email.com">your@email.com</a></p>
+        <p>© {new Date().getFullYear()} Abhilash Honnavalli Puttaiah · <a href="mailto:abilashhp69@gmail.com">abilashhp69@gmail.com</a></p>
     </footer>
 </Layout>
 
@@ -114,7 +270,6 @@ import Layout from '../layouts/Layout.astro';
     .nav-brand {
         font-weight: 700;
         font-size: 1rem;
-        color: var(--text);
         background: linear-gradient(135deg, var(--accent), var(--accent-2));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -138,7 +293,7 @@ import Layout from '../layouts/Layout.astro';
     }
 
     main {
-        max-width: 720px;
+        max-width: 760px;
         margin: 0 auto;
         padding: 60px 24px;
     }
@@ -148,7 +303,7 @@ import Layout from '../layouts/Layout.astro';
     }
 
     .hero h1 {
-        font-size: 2.75rem;
+        font-size: 2.5rem;
         font-weight: 800;
         background: linear-gradient(135deg, var(--accent), var(--accent-2));
         -webkit-background-clip: text;
@@ -159,7 +314,7 @@ import Layout from '../layouts/Layout.astro';
     }
 
     .title {
-        font-size: 1.1rem;
+        font-size: 1rem;
         color: var(--muted);
         margin-bottom: 16px;
         font-weight: 500;
@@ -168,9 +323,9 @@ import Layout from '../layouts/Layout.astro';
     .tagline {
         font-size: 1.05rem;
         color: var(--text);
-        max-width: 560px;
+        max-width: 600px;
         margin-bottom: 32px;
-        line-height: 1.7;
+        line-height: 1.75;
     }
 
     .hero-actions {
@@ -213,10 +368,10 @@ import Layout from '../layouts/Layout.astro';
     }
 
     .section h2 {
-        font-size: 1.15rem;
+        font-size: 0.8rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         color: var(--muted);
         margin-bottom: 12px;
     }
@@ -230,13 +385,44 @@ import Layout from '../layouts/Layout.astro';
     .body-text {
         color: var(--text);
         line-height: 1.75;
-        margin-bottom: 12px;
+        margin-bottom: 14px;
     }
+
+    .body-text strong { color: var(--accent); font-weight: 600; }
+    .body-text em { color: var(--accent-2); font-style: normal; }
 
     .experience-list {
         display: flex;
         flex-direction: column;
-        gap: 32px;
+        gap: 40px;
+    }
+
+    .experience-item {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .company-block {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+    }
+
+    .company-name {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .company-tenure {
+        font-size: 0.8rem;
+        color: var(--muted);
+    }
+
+    .role-block {
+        padding-left: 16px;
+        border-left: 2px solid var(--border);
     }
 
     .experience-header {
@@ -250,32 +436,43 @@ import Layout from '../layouts/Layout.astro';
 
     .role {
         font-weight: 600;
-        font-size: 1rem;
+        font-size: 0.95rem;
         color: var(--text);
     }
 
     .company {
         color: var(--muted);
-        font-size: 0.95rem;
+        font-size: 0.9rem;
+    }
+
+    .location {
+        color: var(--muted);
+        font-size: 0.85rem;
     }
 
     .duration {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: var(--muted);
         white-space: nowrap;
+        flex-shrink: 0;
     }
 
     .experience-bullets {
-        padding-left: 20px;
+        padding-left: 18px;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 7px;
     }
 
     .experience-bullets li {
-        color: var(--text);
-        font-size: 0.95rem;
-        line-height: 1.6;
+        color: #cbd5e1;
+        font-size: 0.9rem;
+        line-height: 1.65;
+    }
+
+    .experience-bullets strong {
+        color: var(--accent);
+        font-weight: 600;
     }
 
     .skills {
@@ -290,8 +487,30 @@ import Layout from '../layouts/Layout.astro';
         color: var(--text);
         padding: 6px 14px;
         border-radius: 20px;
-        font-size: 0.85rem;
+        font-size: 0.83rem;
         font-weight: 500;
+    }
+
+    .awards {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .award-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .award-icon {
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .award-name {
+        font-size: 0.9rem;
+        color: var(--text);
     }
 
     footer {
@@ -302,18 +521,13 @@ import Layout from '../layouts/Layout.astro';
         font-size: 0.875rem;
     }
 
-    footer a {
-        color: var(--muted);
-    }
-
-    footer a:hover {
-        color: var(--text);
-    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--text); }
 
     @media (max-width: 600px) {
         nav { padding: 16px 20px; }
-        .hero h1 { font-size: 2rem; }
+        .hero h1 { font-size: 1.85rem; }
         main { padding: 40px 20px; }
-        .experience-header { flex-direction: column; gap: 4px; }
+        .experience-header { flex-direction: column; gap: 2px; }
     }
 </style>
