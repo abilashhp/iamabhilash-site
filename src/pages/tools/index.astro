@@ -1,0 +1,187 @@
+---
+import Layout from '../../layouts/Layout.astro';
+
+const tools = [
+    {
+        slug: 'timezone-converter',
+        name: 'Timezone Converter',
+        description: 'Convert times across EST, GMT, IST, PST, and BST. Also handles Unix epoch timestamps.',
+        icon: '🕐',
+    },
+    // TODO: Add more tools here as you build them
+];
+---
+
+<Layout title="Tools — Abhilash HP" description="A collection of useful utilities built by Abhilash HP.">
+    <nav>
+        <a href="/" class="nav-back">← Abhilash HP</a>
+        <div class="nav-links">
+            <a href="https://github.com/abhilashhp" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://linkedin.com/in/abhilashhp" target="_blank" rel="noopener">LinkedIn</a>
+        </div>
+    </nav>
+
+    <main>
+        <header class="page-header">
+            <h1>Tools</h1>
+            <p class="subtitle">A collection of small utilities I've built for everyday use.</p>
+        </header>
+
+        <div class="tools-grid">
+            {tools.map(tool => (
+                <a href={`/tools/${tool.slug}`} class="tool-card">
+                    <span class="tool-icon">{tool.icon}</span>
+                    <div class="tool-info">
+                        <h2>{tool.name}</h2>
+                        <p>{tool.description}</p>
+                    </div>
+                    <span class="tool-arrow">→</span>
+                </a>
+            ))}
+
+            <div class="tool-card tool-card-placeholder">
+                <span class="tool-icon">🔧</span>
+                <div class="tool-info">
+                    <h2>More coming soon</h2>
+                    <p>Check back later for new tools.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+</Layout>
+
+<style>
+    nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 40px;
+        border-bottom: 1px solid var(--border);
+        position: sticky;
+        top: 0;
+        background: rgba(15, 23, 42, 0.9);
+        backdrop-filter: blur(8px);
+        z-index: 10;
+    }
+
+    .nav-back {
+        color: var(--muted);
+        font-size: 0.9rem;
+        transition: color 0.2s;
+    }
+
+    .nav-back:hover {
+        color: var(--text);
+        text-decoration: none;
+    }
+
+    .nav-links {
+        display: flex;
+        gap: 24px;
+        font-size: 0.9rem;
+    }
+
+    .nav-links a {
+        color: var(--muted);
+        transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+        color: var(--text);
+        text-decoration: none;
+    }
+
+    main {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 60px 24px;
+    }
+
+    .page-header {
+        margin-bottom: 48px;
+    }
+
+    .page-header h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 8px;
+    }
+
+    .subtitle {
+        color: var(--muted);
+        font-size: 1rem;
+    }
+
+    .tools-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 16px;
+    }
+
+    .tool-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+        transition: border-color 0.2s, transform 0.15s;
+        color: var(--text);
+    }
+
+    .tool-card:not(.tool-card-placeholder):hover {
+        border-color: var(--accent);
+        transform: translateY(-2px);
+        text-decoration: none;
+    }
+
+    .tool-card-placeholder {
+        opacity: 0.4;
+        cursor: default;
+    }
+
+    .tool-icon {
+        font-size: 2rem;
+        flex-shrink: 0;
+    }
+
+    .tool-info {
+        flex: 1;
+    }
+
+    .tool-info h2 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: var(--text);
+    }
+
+    .tool-info p {
+        font-size: 0.875rem;
+        color: var(--muted);
+        line-height: 1.5;
+    }
+
+    .tool-arrow {
+        color: var(--muted);
+        font-size: 1.1rem;
+        flex-shrink: 0;
+        transition: transform 0.2s, color 0.2s;
+    }
+
+    .tool-card:not(.tool-card-placeholder):hover .tool-arrow {
+        color: var(--accent);
+        transform: translateX(4px);
+    }
+
+    @media (max-width: 600px) {
+        nav { padding: 16px 20px; }
+        main { padding: 40px 20px; }
+        .tools-grid { grid-template-columns: 1fr; }
+    }
+</style>
