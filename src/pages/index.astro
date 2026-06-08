@@ -6,528 +6,391 @@ import Layout from '../layouts/Layout.astro';
     title="Abhilash Honnavalli Puttaiah — Security Product Engineer"
     description="Security Product Engineer at Akamai. Building next-gen bot detection platforms. 10+ years across engineering, architecture, and fraud prevention."
 >
-    <nav>
-        <span class="nav-brand">iamabhilash.in</span>
-        <div class="nav-links">
-            <a href="/tools">Tools</a>
-            <a href="https://github.com/abilashhp" target="_blank" rel="noopener">GitHub</a>
-            <a href="https://linkedin.com/in/abilashhp" target="_blank" rel="noopener">LinkedIn</a>
+
+<nav>
+    <a href="/" class="brand">Abhilash HP</a>
+    <div class="nav-right">
+        <a href="/tools">Tools</a>
+        <a href="https://github.com/abilashhp" target="_blank" rel="noopener">GitHub ↗</a>
+        <a href="https://linkedin.com/in/abilashhp" target="_blank" rel="noopener">LinkedIn ↗</a>
+        <a href="/resume.pdf" download class="nav-dl">Resume ↓</a>
+    </div>
+</nav>
+
+<!-- ── HERO (full width) ── -->
+<div class="hero">
+    <div class="hero-glow"></div>
+    <div class="hero-inner">
+        <div class="avail-badge"><span class="dot"></span> Available for new roles</div>
+        <h1>Abhilash<br/>Honnavalli Puttaiah</h1>
+        <p class="role-line">Security Product Engineer &nbsp;·&nbsp; Akamai Technologies</p>
+        <p class="loc-line">Bengaluru, India</p>
+        <p class="tagline">
+            Building the systems that decide — in milliseconds — whether a request is human or
+            a bot. 10+ years at Akamai across security engineering and solutions architecture.
+        </p>
+        <div class="hero-btns">
+            <a href="/resume.pdf" download class="btn-primary">↓ Download Resume</a>
+            <a href="https://linkedin.com/in/abilashhp" target="_blank" rel="noopener" class="btn-ghost">LinkedIn ↗</a>
+            <a href="https://github.com/abilashhp" target="_blank" rel="noopener" class="btn-ghost">GitHub ↗</a>
+            <a href="/tools" class="btn-ghost">Tools →</a>
         </div>
-    </nav>
+        <div class="metrics">
+            <div class="metric">
+                <span class="metric-n">10+</span>
+                <span class="metric-l">Years at Akamai</span>
+            </div>
+            <div class="metric-sep"></div>
+            <div class="metric">
+                <span class="metric-n">200M+</span>
+                <span class="metric-l">Requests protected daily</span>
+            </div>
+            <div class="metric-sep"></div>
+            <div class="metric">
+                <span class="metric-n">£3M</span>
+                <span class="metric-l">Infrastructure savings delivered</span>
+            </div>
+            <div class="metric-sep"></div>
+            <div class="metric">
+                <span class="metric-n">21</span>
+                <span class="metric-l">Enterprise migrations · 0 SLA breaches</span>
+            </div>
+        </div>
+    </div>
+</div>
 
-    <main>
-        <section class="hero">
-            <h1>Abhilash Honnavalli Puttaiah</h1>
-            <p class="title">Security Product Engineer · Akamai Technologies</p>
-            <p class="tagline">
-                I build systems that decide — in milliseconds — whether a request to your website
-                is a human or a bot. 10+ years at Akamai across engineering, architecture, and
-                fraud prevention. Based in Bengaluru.
-            </p>
-            <div class="hero-actions">
-                <a href="/resume.pdf" download class="btn btn-primary">↓ Download Resume</a>
-                <a href="/tools" class="btn btn-secondary">View Tools →</a>
+<!-- ── TWO-COLUMN BODY ── -->
+<div class="page">
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+
+        <section>
+            <h2 class="sec-label">About</h2>
+            <div class="prose">
+                <p>For the last 4 years I've been an engineer inside Akamai's Bot Manager — used by some of the world's largest banks, retailers, and media companies. One system I built is the <strong>Scraper Score</strong> detection engine, which flags evasive bots before they touch your data.</p>
+                <p>Before that, 6 years as a Solutions Architect. I understand both how the technology works <em>and</em> what customers actually need — a rare combination in pure engineering roles.</p>
+                <p>Currently open to <strong>Security Architect</strong>, <strong>Security Product Engineer</strong>, and <strong>Technical Product Manager</strong> roles.</p>
             </div>
         </section>
 
-        <section class="section">
-            <h2>About</h2>
-            <div class="divider"></div>
-            <p class="body-text">
-                For the last 4 years I've been an engineer inside Akamai's Bot Manager — used by
-                some of the world's largest banks, retailers, and media companies. One system I
-                built is the <strong>Scraper Score</strong> detection engine, which flags evasive
-                bots based on request-level signals before they ever touch your data.
-            </p>
-            <p class="body-text">
-                Before that, 6 years as a Solutions Architect — so I understand both how the
-                technology works <em>and</em> what a customer actually needs from it. That
-                combination is rare in pure engineering roles.
-            </p>
-            <p class="body-text">
-                Currently open to <strong>Security Architect</strong>, <strong>Security Product
-                Engineer</strong>, and <strong>Technical Product Manager</strong> roles where the
-                problem is hard and the stakes are real.
-            </p>
-        </section>
-
-        <section class="section">
-            <h2>Experience</h2>
-            <div class="divider"></div>
-            <div class="experience-list">
-
-                <div class="experience-item">
-                    <div class="company-block">
-                        <span class="company-name">Akamai Technologies</span>
-                        <span class="company-tenure">10 years 6 months</span>
-                    </div>
-
-                    <div class="role-block">
-                        <div class="experience-header">
-                            <div>
-                                <span class="role">Senior Software Engineer II</span>
-                                <span class="location"> · Bengaluru</span>
-                            </div>
-                            <span class="duration">Jun 2022 – Present</span>
-                        </div>
-                        <ul class="experience-bullets">
-                            <li>Built the <strong>Scraper Score</strong> detection system for Akamai Content Protector — classifying evasive bots via request-level signals before data exfiltration, protecting clients generating billions in annual revenue.</li>
-                            <li>Architected the edge security metadata layer powering real-time bot detection across <strong>200M+ daily requests</strong>, reducing detection-to-route latency by ~35%.</li>
-                            <li>Designed a DNS load balancer for Bot Manager's backend fleet achieving <strong>99.99% uptime</strong>, eliminating single-point-of-failure risk for Fortune 500 fraud-prevention infrastructure.</li>
-                            <li>Drove 100% on-time migration of <strong>21 enterprise customers</strong> to production beta with zero SLA breaches, reducing post-migration support volume by ~40%.</li>
-                        </ul>
-                    </div>
-
-                    <div class="role-block">
-                        <div class="experience-header">
-                            <div>
-                                <span class="role">Senior Solutions Architect</span>
-                                <span class="location"> · Bengaluru</span>
-                            </div>
-                            <span class="duration">Jul 2020 – May 2022</span>
-                        </div>
-                        <ul class="experience-bullets">
-                            <li>Implemented Akamai-as-Code frameworks for 10+ enterprise customers, embedding CDN configuration into CI/CD pipelines and cutting deployment turnaround by ~30%.</li>
-                            <li>Served as SME across 3 internal product-scaling initiatives, delivering structured beta feedback that shaped feature prioritisation and accelerated product readiness.</li>
-                        </ul>
-                    </div>
-
-                    <div class="role-block">
-                        <div class="experience-header">
-                            <div>
-                                <span class="role">Solutions Architect II</span>
-                                <span class="location"> · Bengaluru</span>
-                            </div>
-                            <span class="duration">Feb 2018 – Jun 2020</span>
-                        </div>
-                        <ul class="experience-bullets">
-                            <li>Owned end-to-end technical integration for 20+ enterprise accounts on Akamai's Web Performance and Security platform — maintaining a <strong>zero failed go-live</strong> record.</li>
-                            <li>Led pre-sales architecture engagements for 15+ APAC enterprise accounts, contributing directly to regional quota attainment.</li>
-                        </ul>
-                    </div>
-
-                    <div class="role-block">
-                        <div class="experience-header">
-                            <div>
-                                <span class="role">Solutions Architect</span>
-                                <span class="location"> · Bengaluru</span>
-                            </div>
-                            <span class="duration">Jan 2016 – Jan 2018</span>
-                        </div>
-                        <ul class="experience-bullets">
-                            <li>Managed onboarding and post-go-live support for 20+ enterprise accounts, building the cross-functional delivery skills that led to the SA II promotion in 2018.</li>
-                        </ul>
-                    </div>
+        <section>
+            <h2 class="sec-label">Skills</h2>
+            <div class="skill-table">
+                <span class="sk-cat">Security</span>
+                <div class="sk-pills">
+                    <span class="pill">Bot Detection</span>
+                    <span class="pill">Fraud Prevention</span>
+                    <span class="pill">DNS Architecture</span>
+                    <span class="pill">Edge Security</span>
+                    <span class="pill">SSL / TLS</span>
                 </div>
-
-                <div class="experience-item">
-                    <div class="company-block">
-                        <span class="company-name">BT (British Telecom)</span>
-                    </div>
-                    <div class="role-block">
-                        <div class="experience-header">
-                            <div>
-                                <span class="role">Consultant</span>
-                                <span class="location"> · Belfast</span>
-                            </div>
-                            <span class="duration">May 2015 – Aug 2015</span>
-                        </div>
-                        <ul class="experience-bullets">
-                            <li>Delivered <strong>£3M in infrastructure cost savings</strong> by migrating 500+ enterprise clients from legacy Sentry API gateway to the Vordel cloud platform — zero downtime in 4 months through meticulous cutover planning and continuous C-suite stakeholder engagement.</li>
-                        </ul>
-                    </div>
+                <span class="sk-cat">Engineering</span>
+                <div class="sk-pills">
+                    <span class="pill">Python</span>
+                    <span class="pill">API Gateway</span>
+                    <span class="pill">CI/CD</span>
+                    <span class="pill">Akamai CDN</span>
+                    <span class="pill">Cloud Migration</span>
                 </div>
-
-                <div class="experience-item">
-                    <div class="company-block">
-                        <span class="company-name">Tech Mahindra</span>
-                        <span class="company-tenure">3 years 9 months</span>
-                    </div>
-                    <div class="role-block">
-                        <div class="experience-header">
-                            <div>
-                                <span class="role">Design & Development Engineer</span>
-                                <span class="location"> · Bengaluru</span>
-                            </div>
-                            <span class="duration">Feb 2014 – Jan 2016</span>
-                        </div>
-                        <ul class="experience-bullets">
-                            <li>Delivered end-to-end API gateway implementations across 3 industry verticals, owning full-cycle policy development, SSL/TLS security setup, and production support with zero post-deployment incidents.</li>
-                        </ul>
-                    </div>
-                    <div class="role-block">
-                        <div class="experience-header">
-                            <div>
-                                <span class="role">Software Engineer</span>
-                                <span class="location"> · Bengaluru</span>
-                            </div>
-                            <span class="duration">May 2012 – Jan 2014</span>
-                        </div>
-                        <ul class="experience-bullets">
-                            <li>Designed functional and non-functional test strategies for enterprise applications; applied Agile/SCRUM methodologies across the full software delivery lifecycle.</li>
-                        </ul>
-                    </div>
-                </div>
-
-            </div>
-        </section>
-
-        <section class="section">
-            <h2>Skills</h2>
-            <div class="divider"></div>
-            <div class="skills">
-                <span class="skill">Bot Detection & Prevention</span>
-                <span class="skill">Fraud Prevention Engineering</span>
-                <span class="skill">DNS Architecture</span>
-                <span class="skill">Edge Security (CDN)</span>
-                <span class="skill">API Gateway</span>
-                <span class="skill">SSL / TLS</span>
-                <span class="skill">Cloud Migration</span>
-                <span class="skill">Azure</span>
-                <span class="skill">CI/CD</span>
-                <span class="skill">Python</span>
-                <span class="skill">Solutions Architecture</span>
-                <span class="skill">Agile / SCRUM</span>
-            </div>
-        </section>
-
-        <section class="section">
-            <h2>Education</h2>
-            <div class="divider"></div>
-            <div class="experience-list">
-                <div class="experience-item">
-                    <div class="experience-header">
-                        <div>
-                            <span class="role">M.S. — Telecommunications & Software Engineering</span>
-                            <span class="company"> · BITS Pilani</span>
-                        </div>
-                        <span class="duration">2013 – 2015</span>
-                    </div>
-                </div>
-                <div class="experience-item">
-                    <div class="experience-header">
-                        <div>
-                            <span class="role">B.E. — Telecommunications Engineering</span>
-                            <span class="company"> · Visvesvaraya Technological University</span>
-                        </div>
-                        <span class="duration">2007 – 2011</span>
-                    </div>
+                <span class="sk-cat">Other</span>
+                <div class="sk-pills">
+                    <span class="pill">Azure</span>
+                    <span class="pill">Solutions Architecture</span>
+                    <span class="pill">Pre-Sales Engineering</span>
+                    <span class="pill">Agile / SCRUM</span>
                 </div>
             </div>
         </section>
 
-        <section class="section">
-            <h2>Certifications & Awards</h2>
-            <div class="divider"></div>
-            <div class="awards">
-                <div class="award-item">
-                    <span class="award-icon">🏆</span>
-                    <div>
-                        <span class="award-name">Akamai STG Thunder Clap Award</span>
-                    </div>
+        <section>
+            <h2 class="sec-label">Education</h2>
+            <div class="edu-list">
+                <div class="edu-row">
+                    <p class="edu-deg">M.S. Telecommunications &amp; Software Eng.</p>
+                    <p class="edu-school">BITS Pilani &nbsp;·&nbsp; 2013–2015</p>
                 </div>
-                <div class="award-item">
-                    <span class="award-icon">🥈</span>
-                    <div>
-                        <span class="award-name">Webex Bot Hackathon — Runner Up II (2025)</span>
-                    </div>
-                </div>
-                <div class="award-item">
-                    <span class="award-icon">☁️</span>
-                    <div>
-                        <span class="award-name">Microsoft Certified: Azure Fundamentals</span>
-                    </div>
-                </div>
-                <div class="award-item">
-                    <span class="award-icon">⭐</span>
-                    <div>
-                        <span class="award-name">Multiple Spot Awards — Akamai (FY16, FY18)</span>
-                    </div>
+                <div class="edu-row">
+                    <p class="edu-deg">B.E. Telecommunications Engineering</p>
+                    <p class="edu-school">Visvesvaraya Technological University &nbsp;·&nbsp; 2007–2011</p>
                 </div>
             </div>
         </section>
+
+        <section>
+            <h2 class="sec-label">Certifications &amp; Awards</h2>
+            <ul class="award-list">
+                <li><span>🏆</span> Akamai STG Thunder Clap Award</li>
+                <li><span>🥈</span> Webex Bot Hackathon Runner Up II — 2025</li>
+                <li><span>☁️</span> Microsoft Certified: Azure Fundamentals</li>
+                <li><span>⭐</span> Akamai Spot Awards — FY16, FY18 ×3</li>
+                <li><span>👏</span> Pat on the Back Award</li>
+            </ul>
+        </section>
+
+    </aside>
+
+    <!-- RIGHT: EXPERIENCE -->
+    <main class="main-col">
+        <h2 class="sec-label">Experience</h2>
+
+        <div class="company">
+            <div class="co-hdr">
+                <span class="co-name">Akamai Technologies</span>
+                <span class="co-tenure">10 yrs 6 mo</span>
+            </div>
+            <div class="roles">
+                <div class="role-row">
+                    <div class="role-meta">
+                        <span class="role-title">Senior Software Engineer II</span>
+                        <span class="role-dates">Jun 2022 – Present</span>
+                    </div>
+                    <ul class="bullets">
+                        <li>Built the <strong>Scraper Score</strong> detection system for Akamai Content Protector — classifying evasive bots via request-level signals before data exfiltration, protecting clients generating billions in annual revenue.</li>
+                        <li>Architected the edge security metadata layer powering real-time bot detection across <strong>200M+ daily requests</strong>, reducing detection-to-route latency by ~35%.</li>
+                        <li>Designed a DNS load balancer for Bot Manager's backend fleet achieving <strong>99.99% uptime</strong>, eliminating single-point-of-failure risk for Fortune 500 fraud-prevention infrastructure.</li>
+                        <li>Drove 100% on-time migration of <strong>21 enterprise customers</strong> to production beta with zero SLA breaches, reducing post-migration support volume by ~40%.</li>
+                    </ul>
+                </div>
+                <div class="role-row">
+                    <div class="role-meta">
+                        <span class="role-title">Senior Solutions Architect</span>
+                        <span class="role-dates">Jul 2020 – May 2022</span>
+                    </div>
+                    <ul class="bullets">
+                        <li>Implemented Akamai-as-Code frameworks for 10+ enterprise customers, embedding CDN configuration into CI/CD pipelines and cutting deployment turnaround by ~30%.</li>
+                        <li>SME across 3 internal product-scaling initiatives, delivering structured beta feedback that shaped feature prioritisation and accelerated product readiness.</li>
+                    </ul>
+                </div>
+                <div class="role-row">
+                    <div class="role-meta">
+                        <span class="role-title">Solutions Architect II</span>
+                        <span class="role-dates">Feb 2018 – Jun 2020</span>
+                    </div>
+                    <ul class="bullets">
+                        <li>Owned end-to-end technical integration for 20+ enterprise accounts — <strong>zero failed go-lives</strong> across all managed deployments.</li>
+                        <li>Led pre-sales architecture engagements for 15+ APAC enterprise accounts, contributing directly to regional quota attainment.</li>
+                    </ul>
+                </div>
+                <div class="role-row last">
+                    <div class="role-meta">
+                        <span class="role-title">Solutions Architect</span>
+                        <span class="role-dates">Jan 2016 – Jan 2018</span>
+                    </div>
+                    <ul class="bullets">
+                        <li>Managed onboarding and post-go-live support for 20+ enterprise accounts, building the cross-functional delivery skills that led to the SA II promotion in 2018.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="company">
+            <div class="co-hdr">
+                <span class="co-name">BT (British Telecom)</span>
+            </div>
+            <div class="roles">
+                <div class="role-row last">
+                    <div class="role-meta">
+                        <span class="role-title">Consultant <em>· Belfast</em></span>
+                        <span class="role-dates">May – Aug 2015</span>
+                    </div>
+                    <ul class="bullets">
+                        <li>Delivered <strong>£3M in infrastructure cost savings</strong> by migrating 500+ enterprise clients from legacy Sentry API gateway to Vordel cloud platform — zero downtime in 4 months through meticulous cutover planning and continuous C-suite stakeholder engagement.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="company last">
+            <div class="co-hdr">
+                <span class="co-name">Tech Mahindra</span>
+                <span class="co-tenure">3 yrs 9 mo</span>
+            </div>
+            <div class="roles">
+                <div class="role-row">
+                    <div class="role-meta">
+                        <span class="role-title">Design &amp; Development Engineer</span>
+                        <span class="role-dates">Feb 2014 – Jan 2016</span>
+                    </div>
+                    <ul class="bullets">
+                        <li>Delivered end-to-end API gateway implementations across 3 industry verticals, owning full-cycle policy development, SSL/TLS security setup, and production support with zero post-deployment incidents.</li>
+                    </ul>
+                </div>
+                <div class="role-row last">
+                    <div class="role-meta">
+                        <span class="role-title">Software Engineer</span>
+                        <span class="role-dates">May 2012 – Jan 2014</span>
+                    </div>
+                    <ul class="bullets">
+                        <li>Designed functional and non-functional test strategies for enterprise applications; applied Agile/SCRUM across the full software delivery lifecycle.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
     </main>
+</div>
 
-    <footer>
-        <p>© {new Date().getFullYear()} Abhilash Honnavalli Puttaiah · <a href="mailto:abilashhp69@gmail.com">abilashhp69@gmail.com</a></p>
-    </footer>
+<footer>
+    <span>© {new Date().getFullYear()} Abhilash Honnavalli Puttaiah</span>
+    <div class="foot-links">
+        <a href="mailto:abilashhp69@gmail.com">abilashhp69@gmail.com</a>
+        <a href="https://linkedin.com/in/abilashhp" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="https://github.com/abilashhp" target="_blank" rel="noopener">GitHub</a>
+        <a href="/tools">Tools</a>
+    </div>
+</footer>
+
 </Layout>
 
 <style>
-    nav {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 20px 40px;
-        border-bottom: 1px solid var(--border);
-        position: sticky;
-        top: 0;
-        background: rgba(15, 23, 42, 0.9);
-        backdrop-filter: blur(8px);
-        z-index: 10;
-    }
+/* ─── NAV ─────────────────────────────────────── */
+nav {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 48px; height: 56px;
+    background: rgba(9,9,11,0.94);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.brand { font-size: 0.9rem; font-weight: 700; color: #fafafa; letter-spacing: -0.01em; }
+.brand:hover { text-decoration: none; color: #a1a1aa; }
+.nav-right { display: flex; align-items: center; gap: 28px; }
+.nav-right a { font-size: 0.825rem; font-weight: 500; color: #71717a; transition: color 0.15s; }
+.nav-right a:hover { color: #fafafa; text-decoration: none; }
+.nav-dl { border: 1px solid rgba(59,130,246,0.35) !important; color: #60a5fa !important; padding: 5px 14px; border-radius: 6px; }
+.nav-dl:hover { background: rgba(59,130,246,0.08); color: #93c5fd !important; }
 
-    .nav-brand {
-        font-weight: 700;
-        font-size: 1rem;
-        background: linear-gradient(135deg, var(--accent), var(--accent-2));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
+/* ─── HERO ────────────────────────────────────── */
+.hero {
+    position: relative; overflow: hidden;
+    padding: 80px 48px 68px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.hero-glow {
+    position: absolute; top: -100px; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 500px;
+    background: radial-gradient(ellipse, rgba(59,130,246,0.1) 0%, transparent 70%);
+    pointer-events: none;
+}
+.hero-inner { max-width: 1200px; margin: 0 auto; position: relative; text-align: center; }
 
-    .nav-links {
-        display: flex;
-        gap: 24px;
-        font-size: 0.9rem;
-    }
+.avail-badge { display: inline-flex; align-items: center; gap: 8px; font-size: 0.775rem; font-weight: 500; color: #4ade80; margin-bottom: 24px; }
+.dot { width: 7px; height: 7px; background: #4ade80; border-radius: 50%; animation: blink 2.5s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-    .nav-links a {
-        color: var(--muted);
-        transition: color 0.2s;
-    }
+h1 { font-size: clamp(2.6rem, 5vw, 4rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1.05; color: #fafafa; margin-bottom: 16px; }
+.role-line { font-size: 1rem; font-weight: 500; color: #60a5fa; margin-bottom: 4px; }
+.loc-line { font-size: 0.85rem; color: #52525b; margin-bottom: 20px; }
+.tagline { font-size: 1rem; color: #a1a1aa; line-height: 1.75; max-width: 580px; margin: 0 auto 32px; }
 
-    .nav-links a:hover {
-        color: var(--text);
-        text-decoration: none;
-    }
+.hero-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 48px; justify-content: center; }
 
-    main {
-        max-width: 760px;
-        margin: 0 auto;
-        padding: 60px 24px;
-    }
+.btn-primary { display: inline-flex; align-items: center; padding: 10px 22px; background: #2563eb; color: #fff; font-size: 0.875rem; font-weight: 600; border-radius: 7px; transition: background 0.15s; }
+.btn-primary:hover { background: #1d4ed8; text-decoration: none; color: #fff; }
+.btn-ghost { display: inline-flex; align-items: center; padding: 9px 18px; border: 1px solid rgba(255,255,255,0.1); color: #a1a1aa; font-size: 0.875rem; font-weight: 500; border-radius: 7px; transition: border-color 0.15s, color 0.15s; }
+.btn-ghost:hover { border-color: rgba(255,255,255,0.25); color: #e4e4e7; text-decoration: none; }
 
-    .hero {
-        margin-bottom: 64px;
-    }
+.metrics { display: flex; align-items: stretch; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; overflow: hidden; max-width: 800px; margin: 0 auto; }
+.metric { flex: 1; padding: 20px 28px; display: flex; flex-direction: column; gap: 5px; }
+.metric-sep { width: 1px; background: rgba(255,255,255,0.06); flex-shrink: 0; }
+.metric-n { font-size: 1.65rem; font-weight: 800; letter-spacing: -0.04em; color: #fafafa; line-height: 1; }
+.metric-l { font-size: 0.7rem; color: #52525b; line-height: 1.4; }
 
-    .hero h1 {
-        font-size: 2.5rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, var(--accent), var(--accent-2));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        line-height: 1.2;
-        margin-bottom: 8px;
-    }
+/* ─── TWO-COLUMN LAYOUT ───────────────────────── */
+.page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 56px 48px 80px;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 64px;
+    align-items: start;
+}
 
-    .title {
-        font-size: 1rem;
-        color: var(--muted);
-        margin-bottom: 16px;
-        font-weight: 500;
-    }
+/* ─── SIDEBAR ─────────────────────────────────── */
+.sidebar {
+    position: sticky;
+    top: 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+}
 
-    .tagline {
-        font-size: 1.05rem;
-        color: var(--text);
-        max-width: 600px;
-        margin-bottom: 32px;
-        line-height: 1.75;
-    }
+/* ─── MAIN COLUMN ─────────────────────────────── */
+.main-col { display: flex; flex-direction: column; gap: 0; }
 
-    .hero-actions {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-    }
+/* ─── SECTION LABEL ───────────────────────────── */
+.sec-label {
+    font-size: 0.68rem; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #3f3f46;
+    margin-bottom: 20px; padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
 
-    .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-size: 0.95rem;
-        font-weight: 600;
-        transition: opacity 0.2s, transform 0.1s;
-        cursor: pointer;
-    }
+/* ─── ABOUT ───────────────────────────────────── */
+.prose p { font-size: 0.875rem; color: #a1a1aa; line-height: 1.8; margin-bottom: 12px; }
+.prose p:last-child { margin-bottom: 0; }
+.prose strong { color: #e4e4e7; font-weight: 600; }
+.prose em { color: #a78bfa; font-style: normal; }
 
-    .btn:hover {
-        opacity: 0.85;
-        text-decoration: none;
-        transform: translateY(-1px);
-    }
+/* ─── SKILLS ──────────────────────────────────── */
+.skill-table { display: grid; grid-template-columns: 80px 1fr; gap: 10px 16px; align-items: center; }
+.sk-cat { font-size: 0.725rem; font-weight: 500; color: #52525b; }
+.sk-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.pill { font-size: 0.72rem; color: #a1a1aa; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); padding: 3px 9px; border-radius: 4px; font-weight: 500; }
 
-    .btn-primary {
-        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-        color: #fff;
-    }
+/* ─── EDUCATION ───────────────────────────────── */
+.edu-list { display: flex; flex-direction: column; gap: 14px; }
+.edu-row { display: flex; flex-direction: column; gap: 2px; }
+.edu-deg { font-size: 0.825rem; font-weight: 600; color: #d4d4d8; line-height: 1.4; }
+.edu-school { font-size: 0.775rem; color: #52525b; }
 
-    .btn-secondary {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        color: var(--text);
-    }
+/* ─── AWARDS ──────────────────────────────────── */
+.award-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.award-list li { font-size: 0.825rem; color: #71717a; display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; }
 
-    .section {
-        margin-bottom: 56px;
-    }
+/* ─── EXPERIENCE ──────────────────────────────── */
+.company { padding-bottom: 36px; margin-bottom: 36px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.company.last { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
-    .section h2 {
-        font-size: 0.8rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: var(--muted);
-        margin-bottom: 12px;
-    }
+.co-hdr { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
+.co-name { font-size: 0.9rem; font-weight: 700; color: #e4e4e7; letter-spacing: -0.01em; }
+.co-tenure { font-size: 0.72rem; color: #3f3f46; }
 
-    .divider {
-        height: 1px;
-        background: var(--border);
-        margin-bottom: 24px;
-    }
+.roles { display: flex; flex-direction: column; }
+.role-row { padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.role-row.last { border-bottom: none; padding-bottom: 0; }
 
-    .body-text {
-        color: var(--text);
-        line-height: 1.75;
-        margin-bottom: 14px;
-    }
+.role-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+.role-title { font-size: 0.875rem; font-weight: 600; color: #d4d4d8; }
+.role-title em { font-style: normal; font-weight: 400; color: #52525b; }
+.role-dates { font-size: 0.775rem; color: #52525b; flex-shrink: 0; }
 
-    .body-text strong { color: var(--accent); font-weight: 600; }
-    .body-text em { color: var(--accent-2); font-style: normal; }
+.bullets { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.bullets li { font-size: 0.875rem; color: #71717a; line-height: 1.65; padding-left: 16px; position: relative; }
+.bullets li::before { content: '–'; position: absolute; left: 0; color: #27272a; }
+.bullets strong { color: #d4d4d8; font-weight: 600; }
 
-    .experience-list {
-        display: flex;
-        flex-direction: column;
-        gap: 40px;
-    }
+/* ─── FOOTER ──────────────────────────────────── */
+footer { border-top: 1px solid rgba(255,255,255,0.06); padding: 24px 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 0.8rem; color: #3f3f46; }
+.foot-links { display: flex; gap: 20px; }
+.foot-links a { color: #52525b; font-size: 0.8rem; transition: color 0.15s; }
+.foot-links a:hover { color: #a1a1aa; text-decoration: none; }
 
-    .experience-item {
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-    }
-
-    .company-block {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-    }
-
-    .company-name {
-        font-size: 1rem;
-        font-weight: 700;
-        color: var(--text);
-    }
-
-    .company-tenure {
-        font-size: 0.8rem;
-        color: var(--muted);
-    }
-
-    .role-block {
-        padding-left: 16px;
-        border-left: 2px solid var(--border);
-    }
-
-    .experience-header {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 10px;
-        flex-wrap: wrap;
-    }
-
-    .role {
-        font-weight: 600;
-        font-size: 0.95rem;
-        color: var(--text);
-    }
-
-    .company {
-        color: var(--muted);
-        font-size: 0.9rem;
-    }
-
-    .location {
-        color: var(--muted);
-        font-size: 0.85rem;
-    }
-
-    .duration {
-        font-size: 0.8rem;
-        color: var(--muted);
-        white-space: nowrap;
-        flex-shrink: 0;
-    }
-
-    .experience-bullets {
-        padding-left: 18px;
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-    }
-
-    .experience-bullets li {
-        color: #cbd5e1;
-        font-size: 0.9rem;
-        line-height: 1.65;
-    }
-
-    .experience-bullets strong {
-        color: var(--accent);
-        font-weight: 600;
-    }
-
-    .skills {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
-    .skill {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        color: var(--text);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 0.83rem;
-        font-weight: 500;
-    }
-
-    .awards {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .award-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .award-icon {
-        font-size: 1.1rem;
-        flex-shrink: 0;
-    }
-
-    .award-name {
-        font-size: 0.9rem;
-        color: var(--text);
-    }
-
-    footer {
-        text-align: center;
-        padding: 32px 24px;
-        border-top: 1px solid var(--border);
-        color: var(--muted);
-        font-size: 0.875rem;
-    }
-
-    footer a { color: var(--muted); }
-    footer a:hover { color: var(--text); }
-
-    @media (max-width: 600px) {
-        nav { padding: 16px 20px; }
-        .hero h1 { font-size: 1.85rem; }
-        main { padding: 40px 20px; }
-        .experience-header { flex-direction: column; gap: 2px; }
-    }
+/* ─── RESPONSIVE ──────────────────────────────── */
+@media (max-width: 900px) {
+    .page { grid-template-columns: 1fr; gap: 48px; padding: 48px 24px 64px; }
+    .sidebar { position: static; }
+    nav { padding: 0 24px; }
+    .hero { padding: 60px 24px 52px; }
+    footer { padding: 24px; }
+}
+@media (max-width: 600px) {
+    .nav-right { gap: 16px; }
+    h1 { font-size: 2.2rem; }
+    .metrics { flex-wrap: wrap; }
+    .metric { min-width: 45%; }
+    .metric-sep { display: none; }
+}
 </style>
