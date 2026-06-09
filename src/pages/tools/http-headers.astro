@@ -1,0 +1,509 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="HTTP Headers — iamabhilash.in" description="Inspect request headers your browser sends and response headers from any URL, with security analysis.">
+
+<nav>
+    <a href="/tools" class="nav-back">← Tools</a>
+    <a href="/" class="nav-home">iamabhilash.in</a>
+</nav>
+
+<div class="page">
+
+    <header class="page-hdr">
+        <h1>HTTP Headers</h1>
+        <p class="sub">Request headers · Response headers · Security analysis</p>
+    </header>
+
+    <div class="tab-bar">
+        <button class="tab active" data-tab="browser">My Browser Headers</button>
+        <button class="tab" data-tab="url">URL Inspector</button>
+    </div>
+
+    <!-- ── My Browser Headers ── -->
+    <div id="panel-browser" class="panel active">
+        <div class="panel-intro">
+            <span>Headers your browser sends with every fetch / XHR request</span>
+            <div style="display:flex;gap:8px">
+                <button class="btn-ghost-sm" id="btn-copy-browser">Copy All</button>
+                <button class="btn-ghost-sm" id="btn-refresh">↻ Refresh</button>
+            </div>
+        </div>
+        <div id="browser-out"></div>
+    </div>
+
+    <!-- ── URL Inspector ── -->
+    <div id="panel-url" class="panel">
+        <div class="url-row">
+            <input type="url" id="url-input" placeholder="https://example.com" spellcheck="false" autocomplete="off" />
+            <button class="btn-inspect" id="btn-inspect">Inspect →</button>
+        </div>
+        <div id="url-out"></div>
+    </div>
+
+</div>
+
+</Layout>
+
+<style>
+/* ── Nav ── */
+nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px; height: 52px;
+    background: rgba(9,9,11,0.94); backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: sticky; top: 0; z-index: 50;
+}
+.nav-back, .nav-home { font-size: 0.85rem; color: #52525b; transition: color 0.15s; }
+.nav-back:hover, .nav-home:hover { color: #e4e4e7; text-decoration: none; }
+
+/* ── Page ── */
+.page { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+.page-hdr { text-align: center; margin-bottom: 28px; }
+h1 {
+    font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 6px;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.sub { color: #52525b; font-size: 0.85rem; }
+
+/* ── Tabs ── */
+.tab-bar { display: flex; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 4px; gap: 2px; margin-bottom: 20px; }
+.tab { flex: 1; background: none; border: none; border-radius: 7px; color: #52525b; cursor: pointer; font-size: 0.825rem; font-weight: 600; padding: 9px 6px; transition: all 0.15s; font-family: inherit; }
+.tab.active { background: #334155; color: #e4e4e7; }
+.tab:hover:not(.active) { color: #a1a1aa; }
+
+/* ── Panels ── */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ── Panel intro bar ── */
+.panel-intro {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 0.78rem; color: #475569; margin-bottom: 14px;
+}
+.btn-ghost-sm {
+    background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+    color: #64748b; cursor: pointer; font-size: 0.72rem; font-weight: 600;
+    padding: 5px 11px; transition: all 0.15s; font-family: inherit;
+}
+.btn-ghost-sm:hover { color: #e4e4e7; border-color: #475569; }
+
+/* ── URL row ── */
+.url-row { display: flex; gap: 10px; margin-bottom: 16px; }
+.url-row input {
+    flex: 1; background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+    color: #e2e8f0; font-family: 'Menlo','Monaco', monospace; font-size: 0.9rem;
+    padding: 11px 14px; outline: none; transition: border-color 0.2s;
+}
+.url-row input:focus { border-color: #3b82f6; }
+.btn-inspect {
+    background: linear-gradient(135deg, #3b82f6, #6d28d9); border: none;
+    border-radius: 8px; color: #fff; font-size: 0.9rem; font-weight: 600;
+    padding: 11px 22px; cursor: pointer; transition: opacity 0.15s;
+    font-family: inherit; white-space: nowrap;
+}
+.btn-inspect:hover { opacity: 0.88; }
+.btn-inspect:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Header table ── */
+.hdr-table { background: #0f172a; border: 1px solid #1e293b; border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+.hdr-row {
+    display: grid; grid-template-columns: 240px 1fr auto;
+    align-items: start; gap: 0;
+    border-bottom: 1px solid #1a2535; padding: 0;
+}
+.hdr-row:last-child { border-bottom: none; }
+.hdr-name {
+    font-family: 'Menlo','Monaco', monospace; font-size: 0.75rem; font-weight: 600;
+    color: #60a5fa; padding: 10px 14px; border-right: 1px solid #1a2535;
+    word-break: break-all; line-height: 1.5;
+}
+.hdr-value {
+    font-family: 'Menlo','Monaco', monospace; font-size: 0.75rem; color: #cbd5e1;
+    padding: 10px 14px; word-break: break-all; line-height: 1.5;
+}
+.hdr-copy-btn {
+    background: transparent; border: none; color: #334155; cursor: pointer;
+    font-size: 0.62rem; font-weight: 600; padding: 10px 12px 10px 4px;
+    transition: color 0.15s; font-family: inherit; align-self: start;
+    white-space: nowrap;
+}
+.hdr-copy-btn:hover { color: #94a3b8; }
+
+/* ── Section labels ── */
+.hdr-section { margin-bottom: 16px; }
+.hdr-section-label {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.09em; color: #334155; margin-bottom: 7px; padding-left: 2px;
+}
+
+/* ── Status bar ── */
+.status-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 16px;
+}
+.status-code { font-size: 0.85rem; font-weight: 700; border-radius: 6px; padding: 3px 10px; font-family: monospace; }
+.status-code.ok       { background: rgba(74,222,128,0.12); color: #4ade80; }
+.status-code.redirect { background: rgba(250,204,21,0.12); color: #facc15; }
+.status-code.err      { background: rgba(248,113,113,0.12); color: #f87171; }
+.status-ms   { font-size: 0.75rem; color: #475569; font-family: monospace; }
+.status-host { font-size: 0.82rem; color: #94a3b8; font-family: monospace; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.copy-all-btn {
+    background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+    color: #64748b; cursor: pointer; font-size: 0.7rem; font-weight: 600;
+    padding: 5px 12px; transition: all 0.15s; font-family: inherit; margin-left: auto;
+}
+.copy-all-btn:hover { color: #e4e4e7; border-color: #475569; }
+
+/* ── Security analysis ── */
+.sec-card {
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+    padding: 18px 20px; margin-bottom: 16px;
+}
+.sec-card-hdr {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+}
+.sec-card-title { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: #64748b; }
+.sec-grade {
+    font-size: 0.75rem; font-weight: 700; border-radius: 6px; padding: 3px 12px;
+}
+.grade-A { background: rgba(74,222,128,0.12); color: #4ade80; }
+.grade-B { background: rgba(134,239,172,0.12); color: #86efac; }
+.grade-C { background: rgba(250,204,21,0.12); color: #facc15; }
+.grade-D { background: rgba(251,146,60,0.12); color: #fb923c; }
+.grade-F { background: rgba(248,113,113,0.12); color: #f87171; }
+
+.sec-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.sec-item {
+    display: flex; align-items: flex-start; gap: 9px;
+    background: #0f172a; border-radius: 8px; padding: 10px 12px; border: 1px solid;
+}
+.sec-item.present { border-color: rgba(74,222,128,0.18); }
+.sec-item.missing  { border-color: rgba(248,113,113,0.12); }
+.sec-check { font-size: 0.72rem; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+.sec-item.present .sec-check { color: #4ade80; }
+.sec-item.missing  .sec-check { color: #f87171; }
+.sec-info { min-width: 0; }
+.sec-hdr-name { font-size: 0.72rem; font-weight: 700; color: #94a3b8; display: block; margin-bottom: 2px; font-family: monospace; }
+.sec-hdr-val  { font-size: 0.68rem; color: #52525b; display: block; word-break: break-all; line-height: 1.4; }
+.sec-hdr-miss { font-size: 0.68rem; color: #3f3f46; display: block; font-style: italic; }
+
+/* ── CORS error ── */
+.cors-block {
+    background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+    padding: 32px 28px; text-align: center; margin-top: 8px;
+}
+.cors-block-icon  { font-size: 2rem; margin-bottom: 10px; }
+.cors-block-title { font-size: 1rem; font-weight: 700; color: #facc15; margin-bottom: 8px; }
+.cors-block-desc  { font-size: 0.82rem; color: #64748b; line-height: 1.6; margin-bottom: 20px; max-width: 480px; margin-left: auto; margin-right: auto; }
+.cors-block-hint  { font-size: 0.72rem; color: #475569; margin-bottom: 8px; }
+.curl-row {
+    display: flex; align-items: center; gap: 10px;
+    background: #020617; border-radius: 8px; padding: 12px 16px;
+    margin: 0 auto 16px; max-width: 520px;
+}
+.curl-row code { font-family: 'Menlo','Monaco', monospace; font-size: 0.8rem; color: #e2e8f0; flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cors-block-alt { font-size: 0.72rem; color: #334155; }
+
+/* ── Loading / error ── */
+.loading-block {
+    background: #1e293b; border: 1px solid #334155; border-radius: 10px;
+    padding: 28px; text-align: center; color: #475569; font-size: 0.85rem;
+}
+.error-block {
+    background: rgba(127,29,29,0.3); border: 1px solid #7f1d1d;
+    border-radius: 10px; padding: 16px 18px; color: #fca5a5; font-size: 0.82rem;
+}
+.spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid #334155; border-top-color: #3b82f6;
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    margin-right: 8px; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+    nav { padding: 0 16px; }
+    .page { padding: 24px 14px 60px; }
+    .hdr-row { grid-template-columns: 1fr; }
+    .hdr-name { border-right: none; border-bottom: 1px solid #1a2535; padding-bottom: 6px; }
+    .hdr-copy-btn { padding: 4px 14px 10px; }
+    .sec-grid { grid-template-columns: 1fr; }
+    .url-row { flex-direction: column; }
+    .btn-inspect { width: 100%; }
+}
+</style>
+
+<script>
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyBtn(value) {
+    const b = document.createElement('button');
+    b.className = 'hdr-copy-btn';
+    b.textContent = 'Copy';
+    b.addEventListener('click', () => {
+        navigator.clipboard.writeText(value).catch(()=>{});
+        b.textContent = 'Copied!';
+        setTimeout(() => b.textContent = 'Copy', 1500);
+    });
+    return b;
+}
+
+function headerTable(entries) {
+    const wrap = document.createElement('div');
+    wrap.className = 'hdr-table';
+    for (const [name, value] of entries) {
+        const row = document.createElement('div');
+        row.className = 'hdr-row';
+        const n = document.createElement('span');
+        n.className = 'hdr-name';
+        n.textContent = name;
+        const v = document.createElement('span');
+        v.className = 'hdr-value';
+        v.textContent = value;
+        row.appendChild(n);
+        row.appendChild(v);
+        row.appendChild(copyBtn(value));
+        wrap.appendChild(row);
+    }
+    return wrap;
+}
+
+function section(label, entries) {
+    const div = document.createElement('div');
+    div.className = 'hdr-section';
+    const lbl = document.createElement('div');
+    lbl.className = 'hdr-section-label';
+    lbl.textContent = label;
+    div.appendChild(lbl);
+    div.appendChild(headerTable(entries));
+    return div;
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        document.getElementById(`panel-${t.dataset.tab}`).classList.add('active');
+        if (t.dataset.tab === 'browser' && !document.getElementById('browser-out').children.length) {
+            loadBrowserHeaders();
+        }
+    });
+});
+
+// ── My Browser Headers ────────────────────────────────────────────────────────
+let browserEntries = [];
+
+// Multiple echo services tried in order — first success wins
+const ECHO_ENDPOINTS = [
+    { url: 'https://httpbun.com/headers',    parse: d => d.headers },
+    { url: 'https://httpbin.org/headers',    parse: d => d.headers },
+    { url: 'https://httpbingo.org/headers',  parse: d => d.headers },
+];
+
+async function loadBrowserHeaders() {
+    const out = document.getElementById('browser-out');
+    out.innerHTML = '<div class="loading-block"><span class="spinner"></span>Fetching your headers…</div>';
+
+    for (const ep of ECHO_ENDPOINTS) {
+        try {
+            const resp = await fetch(ep.url, { signal: AbortSignal.timeout(5000) });
+            if (!resp.ok) continue;
+            const data = await resp.json();
+            const raw  = ep.parse(data);
+            browserEntries = Object.entries(raw).sort((a,b) => a[0].localeCompare(b[0]));
+            out.innerHTML = '';
+            out.appendChild(headerTable(browserEntries));
+            return;
+        } catch { /* try next */ }
+    }
+
+    // All remote endpoints failed — fall back to browser navigator APIs
+    const langs = (navigator.languages || [navigator.language]).join(', ');
+    const fallback = {
+        'user-agent':       navigator.userAgent,
+        'accept-language':  langs || '(unavailable)',
+        'dnt':              navigator.doNotTrack ?? '(not set)',
+    };
+    browserEntries = Object.entries(fallback);
+    out.innerHTML = '';
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:0.75rem;color:#475569;margin-bottom:10px;padding:10px 14px;background:#1e293b;border-radius:8px;border:1px solid #334155';
+    note.textContent = 'Echo services unreachable — showing partial headers available via browser APIs. Headers like Accept-Encoding are set by the browser internally and cannot be read by JavaScript.';
+    out.appendChild(note);
+    out.appendChild(headerTable(browserEntries));
+}
+
+document.getElementById('btn-refresh').addEventListener('click', loadBrowserHeaders);
+
+document.getElementById('btn-copy-browser').addEventListener('click', function() {
+    if (!browserEntries.length) return;
+    const text = browserEntries.map(([k, v]) => `${k}: ${v}`).join('\n');
+    navigator.clipboard.writeText(text).catch(()=>{});
+    this.textContent = 'Copied!';
+    setTimeout(() => this.textContent = 'Copy All', 1500);
+});
+
+loadBrowserHeaders();
+
+// ── URL Inspector ─────────────────────────────────────────────────────────────
+const SEC_HEADERS = [
+    { key: 'strict-transport-security', label: 'Strict-Transport-Security' },
+    { key: 'content-security-policy',   label: 'Content-Security-Policy'   },
+    { key: 'x-frame-options',           label: 'X-Frame-Options'           },
+    { key: 'x-content-type-options',    label: 'X-Content-Type-Options'    },
+    { key: 'referrer-policy',           label: 'Referrer-Policy'           },
+    { key: 'permissions-policy',        label: 'Permissions-Policy'        },
+];
+
+const HEADER_GROUPS = {
+    'Cache':   ['cache-control','expires','etag','last-modified','age','vary','pragma'],
+    'CORS':    ['access-control-allow-origin','access-control-allow-methods','access-control-allow-headers','access-control-allow-credentials','access-control-expose-headers','access-control-max-age'],
+    'Content': ['content-type','content-encoding','content-length','transfer-encoding','content-language','content-disposition'],
+    'Server':  ['server','x-powered-by','via','x-cache','x-cache-status','cf-ray','cf-cache-status','x-served-by','x-request-id'],
+};
+
+async function inspectUrl() {
+    const input   = document.getElementById('url-input');
+    const out     = document.getElementById('url-out');
+    const btn     = document.getElementById('btn-inspect');
+    const rawUrl  = input.value.trim();
+
+    let url;
+    try { url = new URL(rawUrl); } catch {
+        out.innerHTML = '<div class="error-block">Invalid URL — include the protocol, e.g. https://example.com</div>';
+        return;
+    }
+
+    out.innerHTML = '<div class="loading-block"><span class="spinner"></span>Fetching…</div>';
+    btn.disabled  = true;
+
+    const t0 = performance.now();
+    try {
+        const resp = await fetch(rawUrl, { mode: 'cors' });
+        const ms   = Math.round(performance.now() - t0);
+
+        const hdrs = {};
+        resp.headers.forEach((v, k) => { hdrs[k.toLowerCase()] = v; });
+
+        renderUrlResult(out, url.hostname, resp.status, resp.statusText, hdrs, ms, rawUrl);
+    } catch(e) {
+        const ms = Math.round(performance.now() - t0);
+        if (e instanceof TypeError) {
+            renderCorsError(out, rawUrl, url.hostname);
+        } else {
+            out.innerHTML = `<div class="error-block">Request failed (${ms}ms): ${esc(e.message)}</div>`;
+        }
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function renderUrlResult(out, hostname, status, statusText, hdrs, ms, rawUrl) {
+    out.innerHTML = '';
+
+    // Status bar
+    const statusCls = status < 300 ? 'ok' : status < 400 ? 'redirect' : 'err';
+    const bar = document.createElement('div');
+    bar.className = 'status-bar';
+    bar.innerHTML = `
+        <span class="status-code ${statusCls}">${status} ${esc(statusText)}</span>
+        <span class="status-ms">${ms}ms</span>
+        <span class="status-host">${esc(hostname)}</span>`;
+    const cab = document.createElement('button');
+    cab.className = 'copy-all-btn';
+    cab.textContent = 'Copy All';
+    cab.addEventListener('click', () => {
+        const text = Object.entries(hdrs).map(([k,v]) => `${k}: ${v}`).join('\n');
+        navigator.clipboard.writeText(text).catch(()=>{});
+        cab.textContent = 'Copied!';
+        setTimeout(() => cab.textContent = 'Copy All', 1500);
+    });
+    bar.appendChild(cab);
+    out.appendChild(bar);
+
+    // Security analysis
+    const score  = SEC_HEADERS.filter(s => hdrs[s.key]).length;
+    const grade  = score >= 5 ? 'A' : score >= 4 ? 'B' : score >= 3 ? 'C' : score >= 2 ? 'D' : 'F';
+
+    const sec = document.createElement('div');
+    sec.className = 'sec-card';
+    const secHdr = document.createElement('div');
+    secHdr.className = 'sec-card-hdr';
+    secHdr.innerHTML = `<span class="sec-card-title">Security Headers</span><span class="sec-grade grade-${grade}">${score}/${SEC_HEADERS.length} · Grade ${grade}</span>`;
+    sec.appendChild(secHdr);
+
+    const grid = document.createElement('div');
+    grid.className = 'sec-grid';
+    for (const s of SEC_HEADERS) {
+        const present = !!hdrs[s.key];
+        const item = document.createElement('div');
+        item.className = `sec-item ${present ? 'present' : 'missing'}`;
+        item.innerHTML = `
+            <span class="sec-check">${present ? '✓' : '✗'}</span>
+            <span class="sec-info">
+                <span class="sec-hdr-name">${esc(s.label)}</span>
+                ${present
+                    ? `<span class="sec-hdr-val">${esc(hdrs[s.key])}</span>`
+                    : `<span class="sec-hdr-miss">Not set</span>`}
+            </span>`;
+        grid.appendChild(item);
+    }
+    sec.appendChild(grid);
+    out.appendChild(sec);
+
+    // Grouped headers (skip security headers already shown above)
+    const shown = new Set(SEC_HEADERS.map(s => s.key));
+    const grouped = {};
+    for (const [grp, keys] of Object.entries(HEADER_GROUPS)) {
+        const entries = keys.filter(k => hdrs[k] !== undefined).map(k => { shown.add(k); return [k, hdrs[k]]; });
+        if (entries.length) grouped[grp] = entries;
+    }
+    const other = Object.entries(hdrs).filter(([k]) => !shown.has(k));
+    if (other.length) grouped['Other'] = other;
+
+    for (const [grp, entries] of Object.entries(grouped)) {
+        out.appendChild(section(grp, entries));
+    }
+}
+
+function renderCorsError(out, rawUrl, hostname) {
+    out.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'cors-block';
+    div.innerHTML = `
+        <div class="cors-block-icon">⚠️</div>
+        <div class="cors-block-title">CORS Blocked</div>
+        <div class="cors-block-desc">
+            <strong>${esc(hostname)}</strong> does not allow cross-origin requests from the browser.
+            This is a browser security policy — the server returned no CORS headers, so the browser blocked the response.
+        </div>
+        <div class="cors-block-hint">Run this in your terminal to see the full response headers:</div>
+        <div class="curl-row">
+            <code>curl -sI "${esc(rawUrl)}"</code>
+            <button class="hdr-copy-btn" id="btn-copy-curl">Copy</button>
+        </div>
+        <div class="cors-block-alt">Or open DevTools → Network tab, reload the page, and click any request to inspect its headers.</div>`;
+
+    div.querySelector('#btn-copy-curl').addEventListener('click', function() {
+        navigator.clipboard.writeText(`curl -sI "${rawUrl}"`).catch(()=>{});
+        this.textContent = 'Copied!';
+        setTimeout(() => this.textContent = 'Copy', 1500);
+    });
+    out.appendChild(div);
+}
+
+document.getElementById('btn-inspect').addEventListener('click', inspectUrl);
+document.getElementById('url-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') inspectUrl();
+});
+</script>
