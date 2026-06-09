@@ -1,0 +1,622 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="DNS Lookup — iamabhilash.in" description="Query A, AAAA, MX, NS, TXT, SOA, PTR and more across Google, Cloudflare, Quad9 and OpenDNS.">
+
+<nav>
+    <a href="/tools" class="nav-back">← Tools</a>
+    <a href="/" class="nav-home">iamabhilash.in</a>
+</nav>
+
+<div class="page">
+
+    <header class="page-hdr">
+        <h1>DNS Lookup</h1>
+        <p class="sub">Real-time DNS lookups across Google &amp; Cloudflare</p>
+    </header>
+
+    <div class="form-card">
+
+        <!-- Hostnames -->
+        <div class="section">
+            <div class="section-label">Hostnames</div>
+            <div class="section-hint">One per line · enter an IP address to look up reverse DNS (PTR)</div>
+            <textarea id="hosts-input" rows="4" placeholder="example.com&#10;google.com&#10;8.8.8.8 (for PTR)"></textarea>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Record Types -->
+        <div class="section">
+            <div class="section-top">
+                <div>
+                    <div class="section-label">Record Types</div>
+                    <div class="section-hint">Uncheck types you don't need — or leave all selected for a full lookup</div>
+                </div>
+                <label class="select-all-label" id="chk-all-wrap" title="Toggle all types">
+                    <input type="checkbox" id="chk-all" checked>
+                    <span>Select All</span>
+                </label>
+            </div>
+            <div class="type-grid" id="type-grid">
+                <!-- built by JS -->
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Resolvers -->
+        <div class="section">
+            <div class="section-label">Resolvers</div>
+            <div class="section-hint">Each checked resolver is queried in parallel — compare results side by side</div>
+            <div class="resolver-grid" id="resolver-grid">
+                <!-- built by JS -->
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section section-footer">
+            <button class="btn-dig" id="btn-dig">⚡ Dig</button>
+            <div class="dig-hint">Ctrl + Enter to run</div>
+        </div>
+
+    </div><!-- /form-card -->
+
+    <!-- Results -->
+    <div id="results-wrap" style="display:none">
+        <div class="results-bar">
+            <span class="results-meta" id="results-meta"></span>
+            <div class="results-actions">
+                <button class="btn-sm" id="btn-expand-all">Expand All</button>
+                <button class="btn-sm" id="btn-collapse-all">Collapse All</button>
+                <button class="btn-sm" id="btn-copy-all">Copy All</button>
+                <button class="btn-sm" id="btn-new-query">↑ New Query</button>
+            </div>
+        </div>
+        <div id="results-out"></div>
+    </div>
+
+</div>
+
+</Layout>
+
+<style>
+/* ── Nav ── */
+nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px; height: 52px;
+    background: rgba(9,9,11,0.94); backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: sticky; top: 0; z-index: 50;
+}
+.nav-back, .nav-home { font-size: 0.85rem; color: #52525b; transition: color 0.15s; }
+.nav-back:hover, .nav-home:hover { color: #e4e4e7; text-decoration: none; }
+
+/* ── Page ── */
+.page { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+.page-hdr { text-align: center; margin-bottom: 28px; }
+h1 {
+    font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 6px;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.sub { color: #52525b; font-size: 0.85rem; }
+
+/* ── Form card ── */
+.form-card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; overflow: hidden; }
+.section { padding: 22px 24px; }
+.section-footer { padding-top: 18px; padding-bottom: 22px; }
+.divider { height: 1px; background: #334155; margin: 0; }
+
+.section-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 4px; }
+.section-hint  { font-size: 0.78rem; color: #475569; margin-bottom: 12px; line-height: 1.4; }
+
+.section-top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 12px; margin-bottom: 14px;
+}
+.section-top > div { flex: 1; }
+.section-top .section-label { margin-bottom: 4px; }
+.section-top .section-hint  { margin-bottom: 0; }
+
+/* ── Textarea ── */
+textarea {
+    width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+    color: #e2e8f0; font-family: 'Menlo','Monaco','Consolas', monospace;
+    font-size: 0.875rem; padding: 11px 13px; outline: none;
+    transition: border-color 0.2s; resize: vertical; line-height: 1.6;
+}
+textarea:focus { border-color: #3b82f6; }
+
+/* ── Custom checkboxes ── */
+input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; flex-shrink: 0;
+    border: 1.5px solid #475569; border-radius: 4px;
+    background: #0f172a; cursor: pointer; transition: all 0.15s;
+    position: relative;
+}
+input[type="checkbox"]:checked { background: #3b82f6; border-color: #3b82f6; }
+input[type="checkbox"]:checked::after {
+    content: ''; position: absolute; left: 4px; top: 1px;
+    width: 5px; height: 9px;
+    border: 2px solid #fff; border-top: none; border-left: none;
+    transform: rotate(45deg);
+}
+input[type="checkbox"]:indeterminate { background: #1e3a5f; border-color: #3b82f6; }
+input[type="checkbox"]:indeterminate::after {
+    content: ''; position: absolute; left: 2px; top: 5.5px;
+    width: 8px; height: 2px; background: #60a5fa; border: none; transform: none;
+}
+
+/* ── Select All ── */
+.select-all-label {
+    display: flex; align-items: center; gap: 7px; cursor: pointer; flex-shrink: 0;
+    font-size: 0.75rem; font-weight: 600; color: #64748b; white-space: nowrap;
+    padding: 4px 0; margin-top: 2px;
+}
+.select-all-label:hover { color: #94a3b8; }
+
+/* ── Record type grid ── */
+.type-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px 0;
+}
+.type-item {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    padding: 5px 6px; border-radius: 6px; transition: background 0.12s;
+}
+.type-item:hover { background: rgba(255,255,255,0.04); }
+.type-item input { margin: 0; }
+.type-name { font-family: 'Menlo','Monaco', monospace; font-size: 0.78rem; font-weight: 600; color: #94a3b8; }
+.type-item:has(input:checked) .type-name { color: #e2e8f0; }
+
+/* ── Resolver grid — 2 items side by side ── */
+.resolver-grid { display: flex; gap: 8px; }
+.resolver-item {
+    flex: 1; display: flex; align-items: flex-start; gap: 10px;
+    background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+    padding: 12px 14px; cursor: pointer; transition: border-color 0.15s;
+}
+.resolver-item:hover { border-color: #475569; }
+.resolver-item:has(input:checked) { border-color: #334155; background: rgba(59,130,246,0.06); }
+.resolver-item input { margin-top: 2px; }
+.resolver-info { flex: 1; min-width: 0; }
+.resolver-name {
+    font-size: 0.85rem; font-weight: 700; color: #94a3b8; margin-bottom: 2px;
+    display: flex; align-items: center; gap: 6px;
+}
+.resolver-item:has(input:checked) .resolver-name { color: #e2e8f0; }
+.resolver-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.resolver-ip   { font-family: monospace; font-size: 0.68rem; color: #475569; }
+.resolver-desc { font-size: 0.72rem; color: #475569; margin-top: 1px; }
+.resolver-item:has(input:checked) .resolver-ip,
+.resolver-item:has(input:checked) .resolver-desc { color: #52525b; }
+
+/* ── Dig button ── */
+.btn-dig {
+    width: 100%; padding: 13px;
+    background: linear-gradient(135deg, #3b82f6, #6d28d9);
+    border: none; border-radius: 9px; color: #fff;
+    font-size: 1rem; font-weight: 700; cursor: pointer;
+    transition: opacity 0.15s; font-family: inherit; letter-spacing: 0.01em;
+}
+.btn-dig:hover   { opacity: 0.88; }
+.btn-dig:disabled { opacity: 0.4; cursor: not-allowed; }
+.dig-hint { text-align: center; font-size: 0.7rem; color: #3f3f46; margin-top: 8px; }
+
+/* ── Results ── */
+.results-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 20px 0 12px; flex-wrap: wrap; gap: 8px;
+}
+.results-meta { font-size: 0.78rem; color: #52525b; }
+.results-actions { display: flex; gap: 8px; }
+.btn-sm {
+    background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+    color: #71717a; cursor: pointer; font-size: 0.72rem; font-weight: 600;
+    padding: 6px 12px; transition: all 0.15s; font-family: inherit;
+}
+.btn-sm:hover { background: #0f172a; color: #e4e4e7; }
+
+/* ── Result blocks ── */
+.result-block { margin-bottom: 8px; border-radius: 10px; overflow: hidden; border: 1px solid #1e293b; }
+.result-hdr {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: #1e293b; padding: 9px 14px;
+    cursor: pointer; user-select: none; transition: background 0.12s;
+}
+.result-hdr:hover { background: #243447; }
+.rh-toggle { font-size: 0.65rem; color: #3f3f46; flex-shrink: 0; margin-right: 2px; transition: transform 0.15s; display: inline-block; }
+
+/* Show-all toggle button */
+.btn-show-all {
+    display: block; width: 100%; margin: 10px 0 4px;
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+    color: #64748b; cursor: pointer; font-size: 0.8rem; font-weight: 600;
+    padding: 10px 14px; transition: all 0.15s; font-family: inherit; text-align: center;
+}
+.btn-show-all:hover { border-color: #475569; color: #a1a1aa; }
+.rh-ns    { font-size: 0.78rem; font-weight: 700; flex-shrink: 0; }
+.rh-host  { font-family: monospace; font-size: 0.82rem; color: #e2e8f0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rh-type  { font-family: monospace; font-size: 0.62rem; font-weight: 700; color: #52525b; background: #0f172a; border-radius: 4px; padding: 2px 7px; flex-shrink: 0; }
+.rh-code  { font-family: monospace; font-size: 0.62rem; font-weight: 700; border-radius: 4px; padding: 2px 8px; flex-shrink: 0; }
+.rh-code.ok  { background: rgba(74,222,128,0.10); color: #4ade80; }
+.rh-code.nx  { background: rgba(248,113,113,0.10); color: #f87171; }
+.rh-code.err { background: rgba(248,113,113,0.10); color: #f87171; }
+.rh-cnt  { font-size: 0.62rem; color: #3f3f46; flex-shrink: 0; }
+.rh-ms   { font-size: 0.62rem; color: #2d3748; font-family: monospace; flex-shrink: 0; }
+.rh-copy {
+    margin-left: auto; background: transparent; border: 1px solid #334155; border-radius: 5px;
+    color: #475569; cursor: pointer; font-size: 0.62rem; font-weight: 600;
+    padding: 2px 9px; transition: all 0.15s; font-family: inherit; flex-shrink: 0;
+}
+.rh-copy:hover { color: #e4e4e7; border-color: #52525b; }
+
+/* ── Terminal ── */
+pre.dig-pre {
+    margin: 0; background: #020617; padding: 16px 18px;
+    font-family: 'Menlo','Monaco','Consolas','Courier New', monospace;
+    font-size: 0.77rem; line-height: 1.7; overflow-x: auto; white-space: pre; color: #e2e8f0;
+}
+.c-comment { color: #4ade80; }
+.c-ok  { color: #22c55e; font-weight: 700; }
+.c-err { color: #f87171; font-weight: 700; }
+.c-ad  { color: #a78bfa; font-weight: 700; }
+
+.loading-block {
+    background: #020617; border-radius: 10px; padding: 28px; text-align: center;
+    color: #52525b; font-size: 0.85rem; border: 1px solid #1e293b;
+}
+.spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid #334155; border-top-color: #3b82f6;
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    margin-right: 8px; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+    nav { padding: 0 16px; }
+    .page { padding: 24px 14px 60px; }
+    .section { padding: 18px 16px; }
+    .type-grid { grid-template-columns: repeat(3, 1fr); }
+    .resolver-grid { flex-direction: column; }
+    .rh-ms, .rh-cnt { display: none; }
+    pre.dig-pre { font-size: 0.68rem; }
+}
+</style>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────────────────────
+
+const RECORD_TYPES = [
+    { type: 'A',      desc: 'IPv4 address' },
+    { type: 'AAAA',   desc: 'IPv6 address' },
+    { type: 'CNAME',  desc: 'Alias' },
+    { type: 'MX',     desc: 'Mail servers' },
+    { type: 'NS',     desc: 'Nameservers' },
+    { type: 'TXT',    desc: 'Text / SPF / DKIM' },
+    { type: 'SOA',    desc: 'Zone authority' },
+    { type: 'PTR',    desc: 'Reverse DNS' },
+    { type: 'SRV',    desc: 'Service locator' },
+    { type: 'CAA',    desc: 'CA authorization' },
+    { type: 'DS',     desc: 'DNSSEC delegation' },
+    { type: 'DNSKEY', desc: 'DNSSEC key' },
+];
+
+const RESOLVERS = [
+    { key: 'google',     label: 'Google',     ip: '8.8.8.8', color: '#4285f4', desc: 'Google Public DNS',
+      url: (n,t) => `https://dns.google/resolve?name=${encodeURIComponent(n)}&type=${t}`, hdrs: {} },
+    { key: 'cloudflare', label: 'Cloudflare', ip: '1.1.1.1', color: '#f6821f', desc: 'Privacy-first, fastest',
+      url: (n,t) => `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(n)}&type=${t}`, hdrs: { Accept: 'application/dns-json' } },
+];
+
+const RCODE = { 0:'NOERROR', 1:'FORMERR', 2:'SERVFAIL', 3:'NXDOMAIN', 4:'NOTIMP', 5:'REFUSED' };
+const RTYPE = { 1:'A', 2:'NS', 5:'CNAME', 6:'SOA', 12:'PTR', 15:'MX', 16:'TXT', 28:'AAAA', 33:'SRV', 43:'DS', 46:'RRSIG', 47:'NSEC', 48:'DNSKEY', 257:'CAA' };
+
+const MAX_QUERIES = 60;
+
+// ── Build form ────────────────────────────────────────────────────────────────
+
+// Record type checkboxes
+const typeGrid = document.getElementById('type-grid');
+for (const rt of RECORD_TYPES) {
+    const lbl = document.createElement('label');
+    lbl.className = 'type-item';
+    lbl.title = rt.desc;
+    lbl.innerHTML = `<input type="checkbox" name="rtype" value="${rt.type}" checked><span class="type-name">${rt.type}</span>`;
+    typeGrid.appendChild(lbl);
+}
+
+// Select All logic
+const chkAll = document.getElementById('chk-all');
+function syncSelectAll() {
+    const boxes = document.querySelectorAll('#type-grid input[type=checkbox]');
+    const checked = [...boxes].filter(b => b.checked).length;
+    if (checked === 0) { chkAll.checked = false; chkAll.indeterminate = false; }
+    else if (checked === boxes.length) { chkAll.checked = true; chkAll.indeterminate = false; }
+    else { chkAll.indeterminate = true; chkAll.checked = false; }
+}
+document.getElementById('type-grid').addEventListener('change', syncSelectAll);
+chkAll.addEventListener('change', () => {
+    const on = chkAll.checked;
+    document.querySelectorAll('#type-grid input[type=checkbox]').forEach(b => b.checked = on);
+    chkAll.indeterminate = false;
+});
+
+// Resolver checkboxes — both checked by default
+const resolverGrid = document.getElementById('resolver-grid');
+for (const r of RESOLVERS) {
+    const lbl = document.createElement('label');
+    lbl.className = 'resolver-item';
+    lbl.innerHTML = `
+        <input type="checkbox" name="resolver" value="${r.key}" checked>
+        <div class="resolver-info">
+            <div class="resolver-name">
+                <span class="resolver-dot" style="background:${r.color}"></span>${r.label}
+            </div>
+            <div class="resolver-ip">${r.ip}</div>
+            <div class="resolver-desc">${r.desc}</div>
+        </div>`;
+    resolverGrid.appendChild(lbl);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function normalizeForPTR(host) {
+    const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    return m ? `${m[4]}.${m[3]}.${m[2]}.${m[1]}.in-addr.arpa` : host;
+}
+
+// ── DoH query ─────────────────────────────────────────────────────────────────
+async function dohQuery(resolver, name, type) {
+    const t0 = performance.now();
+    try {
+        const resp = await fetch(resolver.url(name, type), { headers: resolver.hdrs });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        return { ok: true, data, ms: Math.round(performance.now() - t0) };
+    } catch(e) {
+        return { ok: false, error: e.message, ms: Math.round(performance.now() - t0) };
+    }
+}
+
+// ── Format dig output ─────────────────────────────────────────────────────────
+function formatDig(host, type, resolver, result) {
+    const lines = [];
+    lines.push(`; <<>> DNS Lookup <<>> ${host} IN ${type} @${resolver.label} (${resolver.ip})`);
+    if (!result.ok) {
+        lines.push(`;; ERROR: ${result.error}`);
+        lines.push(`;; Query time: ${result.ms} ms`);
+        return lines.join('\n');
+    }
+    const d = result.data;
+    const rcode  = RCODE[d.Status] ?? `RCODE${d.Status}`;
+    const flags  = [d.RD&&'rd', d.RA&&'ra', d.TC&&'tc', d.AD&&'ad', d.CD&&'cd'].filter(Boolean).join(' ');
+    const dnssec = d.AD ? ' [DNSSEC validated]' : '';
+    lines.push(`;; ->>HEADER<<- opcode: QUERY, status: ${rcode}${dnssec}`);
+    lines.push(`;; flags: qr ${flags}; QUERY: ${(d.Question||[]).length}, ANSWER: ${(d.Answer||[]).length}, AUTHORITY: ${(d.Authority||[]).length}, ADDITIONAL: ${(d.Additional||[]).length}`);
+    lines.push('');
+    if (d.Question?.length) {
+        lines.push(';; QUESTION SECTION:');
+        for (const q of d.Question)
+            lines.push(`;${String(q.name).padEnd(30)} IN    ${RTYPE[q.type]??`TYPE${q.type}`}`);
+        lines.push('');
+    }
+    if (d.Answer?.length) {
+        lines.push(';; ANSWER SECTION:');
+        for (const a of d.Answer) {
+            const t = RTYPE[a.type] ?? `TYPE${a.type}`;
+            lines.push(`${String(a.name).padEnd(30)} ${String(a.TTL).padStart(7)}  IN    ${t.padEnd(8)} ${a.data}`);
+        }
+        lines.push('');
+    } else if (d.Status === 0) {
+        lines.push(';; ANSWER SECTION:');
+        lines.push(';; (no records found)');
+        lines.push('');
+    }
+    if (d.Authority?.length) {
+        lines.push(';; AUTHORITY SECTION:');
+        for (const a of d.Authority) {
+            const t = RTYPE[a.type] ?? `TYPE${a.type}`;
+            lines.push(`${String(a.name).padEnd(30)} ${String(a.TTL).padStart(7)}  IN    ${t.padEnd(8)} ${a.data}`);
+        }
+        lines.push('');
+    }
+    if (d.Comment) { lines.push(`; ${d.Comment}`); lines.push(''); }
+    lines.push(`;; Query time: ${result.ms} ms`);
+    lines.push(`;; SERVER: ${resolver.ip} (${resolver.label})`);
+    return lines.join('\n');
+}
+
+function colorize(text) {
+    return text.split('\n').map(line => {
+        if (line === '') return '';
+        const e = escHtml(line);
+        if (line.startsWith(';')) {
+            return `<span class="c-comment">${
+                e.replace(/\b(NOERROR)\b/g, '<span class="c-ok">$1</span>')
+                 .replace(/\b(NXDOMAIN|SERVFAIL|REFUSED|FORMERR|NOTIMP)\b/g, '<span class="c-err">$1</span>')
+                 .replace(/\[DNSSEC validated\]/g, '<span class="c-ad">[DNSSEC validated]</span>')
+            }</span>`;
+        }
+        return escHtml(line);
+    }).join('\n');
+}
+
+// ── Main lookup ───────────────────────────────────────────────────────────────
+let currentResults = [];
+
+async function doLookup() {
+    const hosts = document.getElementById('hosts-input').value
+        .split('\n').map(s => s.trim()).filter(Boolean);
+
+    const types = [...document.querySelectorAll('#type-grid input:checked')].map(b => b.value);
+    const resolverKeys = [...document.querySelectorAll('#resolver-grid input:checked')].map(b => b.value);
+    const resolvers = RESOLVERS.filter(r => resolverKeys.includes(r.key));
+
+    if (!hosts.length)     return alert('Enter at least one hostname.');
+    if (!types.length)     return alert('Select at least one record type.');
+    if (!resolvers.length) return alert('Select at least one resolver.');
+
+    const total = hosts.length * types.length * resolvers.length;
+    if (total > MAX_QUERIES) return alert(`Too many queries (${total}). Reduce hosts, types, or resolvers. Max is ${MAX_QUERIES}.`);
+
+    const wrap    = document.getElementById('results-wrap');
+    const out     = document.getElementById('results-out');
+    const meta    = document.getElementById('results-meta');
+    const digBtn  = document.getElementById('btn-dig');
+
+    wrap.style.display = 'block';
+    out.innerHTML = `<div class="loading-block"><span class="spinner"></span>Running ${total} quer${total===1?'y':'ies'} in parallel…</div>`;
+    meta.textContent = '';
+    digBtn.disabled = true;
+    digBtn.textContent = '⏳ Running…';
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const queries = [];
+    for (const rawHost of hosts) {
+        for (const type of types) {
+            const host = type === 'PTR' ? normalizeForPTR(rawHost) : rawHost;
+            for (const resolver of resolvers) {
+                queries.push({ host, type, resolver, rawHost });
+            }
+        }
+    }
+
+    const results = await Promise.all(queries.map(async q => {
+        const result    = await dohQuery(q.resolver, q.host, q.type);
+        const formatted = formatDig(q.host, q.type, q.resolver, result);
+        return { ...q, result, formatted };
+    }));
+
+    currentResults = results;
+    out.innerHTML = '';
+
+    let errCount = 0, totalAnswers = 0;
+    results.forEach(r => {
+        const rcode = r.result.ok ? (RCODE[r.result.data?.Status] ?? 'UNKNOWN') : 'ERROR';
+        if (rcode !== 'NOERROR') errCount++;
+        totalAnswers += r.result.ok ? (r.result.data?.Answer?.length ?? 0) : 0;
+    });
+    const okCount = results.length - errCount;
+    meta.textContent = `${results.length} quer${results.length!==1?'ies':'y'} · ${okCount} OK · ${errCount} error${errCount!==1?'s':''}`;
+
+    // First result — always visible, expanded
+    out.appendChild(buildBlock(results[0], true));
+
+    // Remaining results hidden behind a toggle button
+    if (results.length > 1) {
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn-show-all';
+        toggleBtn.textContent = `▼  Show all ${results.length} results`;
+        out.appendChild(toggleBtn);
+
+        const allWrap = document.createElement('div');
+        allWrap.style.display = 'none';
+        results.slice(1).forEach(r => allWrap.appendChild(buildBlock(r, false)));
+        out.appendChild(allWrap);
+
+        toggleBtn.addEventListener('click', () => {
+            const open = allWrap.style.display !== 'none';
+            allWrap.style.display = open ? 'none' : 'block';
+            toggleBtn.textContent = open
+                ? `▼  Show all ${results.length} results`
+                : `▲  Hide all results`;
+        });
+    }
+
+    digBtn.disabled = false;
+    digBtn.textContent = '⚡ Dig';
+}
+
+// ── Build a single result block ───────────────────────────────────────────────
+function buildBlock(r, startOpen) {
+    const rcode   = r.result.ok ? (RCODE[r.result.data?.Status] ?? 'UNKNOWN') : 'ERROR';
+    const rcCls   = rcode === 'NOERROR' ? 'ok' : (rcode === 'NXDOMAIN' ? 'nx' : 'err');
+    const answers = r.result.ok ? (r.result.data?.Answer?.length ?? 0) : 0;
+    const display = r.rawHost !== r.host ? `${r.rawHost} → ${r.host}` : r.host;
+
+    const block = document.createElement('div');
+    block.className = 'result-block';
+    block.innerHTML = `
+        <div class="result-hdr">
+            <span class="rh-toggle">${startOpen ? '▼' : '▶'}</span>
+            <span class="rh-ns" style="color:${r.resolver.color}">${r.resolver.label}</span>
+            <span class="rh-host">${escHtml(display)}</span>
+            <span class="rh-type">${r.type}</span>
+            <span class="rh-code ${rcCls}">${rcode}</span>
+            <span class="rh-cnt">${answers} answer${answers!==1?'s':''}</span>
+            ${r.result.ok ? `<span class="rh-ms">${r.result.ms}ms</span>` : ''}
+            <button class="rh-copy">Copy</button>
+        </div>
+        <pre class="dig-pre" style="display:${startOpen ? 'block' : 'none'}">${colorize(r.formatted)}</pre>`;
+
+    const hdr    = block.querySelector('.result-hdr');
+    const pre    = block.querySelector('.dig-pre');
+    const toggle = block.querySelector('.rh-toggle');
+
+    hdr.addEventListener('click', e => {
+        if (e.target.classList.contains('rh-copy')) return;
+        const open = pre.style.display !== 'none';
+        pre.style.display      = open ? 'none' : 'block';
+        toggle.textContent     = open ? '▶' : '▼';
+        toggle.style.transform = '';
+    });
+    block.querySelector('.rh-copy').addEventListener('click', function(e) {
+        e.stopPropagation();
+        navigator.clipboard.writeText(r.formatted).catch(()=>{});
+        const orig = this.textContent; this.textContent = 'Copied!';
+        setTimeout(() => this.textContent = orig, 1500);
+    });
+    return block;
+}
+
+// ── Expand / Collapse All ─────────────────────────────────────────────────────
+document.getElementById('btn-expand-all').addEventListener('click', () => {
+    // Reveal the hidden section first
+    const allWrap   = document.querySelector('#results-out .btn-show-all + div');
+    const toggleBtn = document.querySelector('#results-out .btn-show-all');
+    if (allWrap)   { allWrap.style.display = 'block'; }
+    if (toggleBtn) { toggleBtn.textContent = '▲  Hide all results'; }
+    // Expand every block
+    document.querySelectorAll('#results-out .result-block').forEach(b => {
+        b.querySelector('.dig-pre').style.display  = 'block';
+        b.querySelector('.rh-toggle').textContent  = '▼';
+    });
+});
+document.getElementById('btn-collapse-all').addEventListener('click', () => {
+    document.querySelectorAll('#results-out .result-block').forEach(b => {
+        b.querySelector('.dig-pre').style.display  = 'none';
+        b.querySelector('.rh-toggle').textContent  = '▶';
+    });
+});
+
+// ── Copy All ──────────────────────────────────────────────────────────────────
+document.getElementById('btn-copy-all').addEventListener('click', function() {
+    if (!currentResults.length) return;
+    const sep  = '\n' + '─'.repeat(72) + '\n\n';
+    navigator.clipboard.writeText(currentResults.map(r => r.formatted).join(sep)).catch(()=>{});
+    const orig = this.textContent; this.textContent = 'Copied!';
+    setTimeout(() => this.textContent = orig, 1500);
+});
+
+document.getElementById('btn-new-query').addEventListener('click', () => {
+    document.getElementById('results-wrap').style.display = 'none';
+    document.getElementById('hosts-input').focus();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+document.getElementById('btn-dig').addEventListener('click', doLookup);
+
+document.getElementById('hosts-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); doLookup(); }
+});
+</script>
