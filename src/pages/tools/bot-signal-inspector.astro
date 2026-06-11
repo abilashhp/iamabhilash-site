@@ -1,0 +1,503 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout
+    title="Bot Signal Inspector — Abhilash HP"
+    description="Analyze your browser's bot detection signals. See what automated browser detection systems look for in real time."
+>
+
+<nav>
+    <a href="/tools" class="nav-back">← Tools</a>
+    <div class="nav-links">
+        <a href="https://github.com/abilashhp" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://linkedin.com/in/abilashhp" target="_blank" rel="noopener">LinkedIn</a>
+    </div>
+</nav>
+
+<main>
+    <header class="page-header">
+        <h1>Bot Signal Inspector</h1>
+        <p class="subtitle">See the browser signals that bot detection systems analyze in real time.</p>
+    </header>
+
+    <div class="score-card">
+        <div class="score-donut">
+            <svg viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" class="donut-track"/>
+                <circle cx="50" cy="50" r="40" class="donut-fill" id="donut-fill"
+                    stroke-dasharray="0 251.3"/>
+            </svg>
+            <div class="score-center-text">
+                <span id="score-num">—</span>
+            </div>
+        </div>
+        <div class="score-meta">
+            <div class="score-verdict" id="score-verdict">Analyzing…</div>
+            <div class="score-sub" id="score-sub">Running signal checks</div>
+            <div class="score-bar-bg">
+                <div class="score-bar-fill" id="score-bar-fill"></div>
+            </div>
+            <div class="score-tally" id="score-tally"></div>
+        </div>
+    </div>
+
+    <div class="env-bar" id="env-bar"></div>
+
+    <div class="sig-group-label">Passive Signals <span>— checked on page load</span></div>
+    <div class="signals-grid" id="passive-grid"></div>
+
+    <div class="sig-group-label" style="margin-top:36px;">Behavioral Signals <span>— collected live over the next few seconds</span></div>
+    <div class="signals-grid" id="behavioral-grid"></div>
+
+    <div class="footer-row">
+        <button class="btn-rescan" id="btn-rescan">↻ Re-scan</button>
+        <span class="footer-note">Try opening this page in a headless browser or Puppeteer script to see the score drop.</span>
+    </div>
+</main>
+
+</Layout>
+
+<style>
+nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 40px; height: 52px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(15,23,42,0.92); backdrop-filter: blur(8px);
+}
+.nav-back { color: var(--muted); font-size: 0.875rem; transition: color 0.15s; }
+.nav-back:hover { color: var(--text); text-decoration: none; }
+.nav-links { display: flex; gap: 20px; font-size: 0.875rem; }
+.nav-links a { color: var(--muted); transition: color 0.15s; }
+.nav-links a:hover { color: var(--text); text-decoration: none; }
+
+main { max-width: 900px; margin: 0 auto; padding: 56px 24px 80px; }
+
+.page-header { margin-bottom: 36px; }
+.page-header h1 {
+    font-size: 2rem; font-weight: 800;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; margin-bottom: 8px;
+}
+.subtitle { color: var(--muted); font-size: 0.95rem; }
+
+.score-card {
+    display: flex; align-items: center; gap: 28px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px 28px; margin-bottom: 14px;
+}
+.score-donut { position: relative; width: 90px; height: 90px; flex-shrink: 0; }
+.score-donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.donut-track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 10; }
+.donut-fill {
+    fill: none; stroke: #60a5fa; stroke-width: 10; stroke-linecap: round;
+    transition: stroke-dasharray 0.8s ease, stroke 0.5s ease;
+}
+.score-center-text {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+}
+#score-num { font-size: 1.6rem; font-weight: 800; color: #fafafa; letter-spacing: -0.04em; }
+.score-meta { flex: 1; min-width: 0; }
+.score-verdict { font-size: 1.15rem; font-weight: 700; color: #fafafa; margin-bottom: 4px; transition: color 0.5s; }
+.score-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; }
+.score-bar-bg { height: 5px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+.score-bar-fill { height: 100%; background: #60a5fa; border-radius: 3px; width: 0; transition: width 0.8s ease, background 0.5s ease; }
+.score-tally { font-size: 0.75rem; color: #475569; }
+
+.env-bar {
+    font-size: 0.7rem; color: #334155; margin-bottom: 28px;
+    font-family: 'SF Mono','Fira Code',monospace; line-height: 1.6;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.sig-group-label {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #64748b;
+    padding-bottom: 10px; margin-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+}
+.sig-group-label span { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 0.725rem; }
+
+.footer-row { display: flex; align-items: center; gap: 16px; margin-top: 36px; flex-wrap: wrap; }
+.btn-rescan {
+    padding: 9px 20px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); cursor: pointer; font-size: 0.875rem;
+    font-weight: 600; transition: all 0.15s; font-family: inherit;
+}
+.btn-rescan:hover { border-color: #60a5fa; color: #60a5fa; }
+.footer-note { font-size: 0.75rem; color: #334155; line-height: 1.5; }
+
+/* Signal cards are rendered by JS — must use :global() to pierce Astro scoping */
+:global(.signals-grid) {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
+:global(.sig-card) {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid #334155; border-radius: 12px;
+    padding: 14px 16px;
+}
+:global(.sig-card.pass)    { border-left-color: #22c55e; }
+:global(.sig-card.warn)    { border-left-color: #f59e0b; }
+:global(.sig-card.fail)    { border-left-color: #ef4444; }
+:global(.sig-card.pending) { border-left-color: #334155; }
+
+:global(.sig-head) { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+:global(.sig-name) { font-size: 0.8rem; font-weight: 600; color: #d4d4d8; }
+:global(.sig-badge) {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 3px; flex-shrink: 0;
+}
+:global(.badge-pass)    { background: rgba(34,197,94,0.1);   color: #4ade80; }
+:global(.badge-warn)    { background: rgba(245,158,11,0.1);  color: #fbbf24; }
+:global(.badge-fail)    { background: rgba(239,68,68,0.1);   color: #f87171; }
+:global(.badge-pending) { background: rgba(100,116,139,0.1); color: #64748b; }
+
+:global(.sig-value) {
+    font-size: 0.75rem; font-family: 'SF Mono','Fira Code',monospace;
+    color: #94a3b8; margin-bottom: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+:global(.sig-detail) { font-size: 0.71rem; color: #64748b; line-height: 1.45; margin-bottom: 4px; }
+:global(.sig-desc)   { font-size: 0.68rem; color: #334155; line-height: 1.4; font-style: italic; }
+
+@media (max-width: 640px) {
+    nav { padding: 0 16px; }
+    main { padding: 36px 16px 60px; }
+    .score-card { gap: 18px; padding: 18px 20px; }
+    :global(.signals-grid) { grid-template-columns: 1fr; }
+}
+</style>
+
+<script>
+const CIRC = 2 * Math.PI * 40; // circumference for r=40 donut ≈ 251.3
+
+// ── PASSIVE SIGNAL DEFINITIONS ───────────────────────────────────────
+
+const PASSIVE = [
+    {
+        key: 'webdriver',
+        name: 'Automation Flag',
+        desc: 'navigator.webdriver — set to true by Selenium, Playwright & Puppeteer',
+        weight: 3,
+        run() {
+            const v = navigator.webdriver;
+            if (v === true)
+                return { status: 'fail', value: 'true', detail: 'Browser is under active automation control' };
+            return { status: 'pass', value: v === undefined ? 'not set' : 'false', detail: 'No automation flag detected' };
+        },
+    },
+    {
+        key: 'outer-window',
+        name: 'Window Dimensions',
+        desc: 'outerWidth / outerHeight — headless Chrome always reports 0 × 0',
+        weight: 2,
+        run() {
+            const w = window.outerWidth, h = window.outerHeight;
+            if (w === 0 || h === 0)
+                return { status: 'fail', value: `${w} × ${h}`, detail: 'Headless Chrome reports 0 × 0 outer dimensions' };
+            if (w === screen.width && h === screen.height)
+                return { status: 'warn', value: `${w} × ${h}`, detail: 'Window fills entire screen — uncommon for real desktop sessions' };
+            return { status: 'pass', value: `${w} × ${h}`, detail: 'Normal windowed browser dimensions' };
+        },
+    },
+    {
+        key: 'webgl',
+        name: 'WebGL Renderer',
+        desc: 'GPU vendor string — headless instances often use SwiftShader (software rendering)',
+        weight: 2,
+        run() {
+            try {
+                const c = document.createElement('canvas');
+                const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+                if (!gl) return { status: 'warn', value: 'unavailable', detail: 'WebGL not supported or blocked' };
+                const ext = gl.getExtension('WEBGL_debug_renderer_info');
+                if (!ext) return { status: 'warn', value: 'info hidden', detail: 'Renderer extension unavailable — cannot verify GPU' };
+                const vendor   = gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)   || '';
+                const renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '';
+                const combined = `${vendor} / ${renderer}`;
+                const softRE   = /swiftshader|llvmpipe|brian paul|softpipe|microsoft basic render|mesa.*software/i;
+                if (softRE.test(renderer) || softRE.test(vendor))
+                    return { status: 'warn', value: combined.slice(0, 55), detail: 'Software renderer detected — common in VMs and headless environments' };
+                if (!renderer)
+                    return { status: 'fail', value: 'empty', detail: 'No renderer string returned' };
+                return { status: 'pass', value: combined.slice(0, 55), detail: 'Real GPU renderer detected' };
+            } catch (_) {
+                return { status: 'warn', value: 'error', detail: 'WebGL check threw an exception' };
+            }
+        },
+    },
+    {
+        key: 'plugins',
+        name: 'Browser Plugins',
+        desc: 'navigator.plugins — headless browsers ship with none; Firefox reports 0 by design',
+        weight: 2,
+        run() {
+            const n = navigator.plugins ? navigator.plugins.length : 0;
+            const isFF = /Firefox/i.test(navigator.userAgent);
+            if (isFF)    return { status: 'pass', value: '0 (Firefox)', detail: 'Firefox intentionally reports zero plugins — expected behaviour' };
+            if (n === 0) return { status: 'fail', value: '0', detail: 'No plugins — typical of headless or automated browsers' };
+            if (n < 3)   return { status: 'warn', value: String(n), detail: 'Fewer plugins than most real browsers' };
+            return { status: 'pass', value: String(n), detail: 'Plugin count consistent with a real browser' };
+        },
+    },
+    {
+        key: 'languages',
+        name: 'Language List',
+        desc: 'navigator.languages — bots often send one language or none',
+        weight: 1,
+        run() {
+            const langs = Array.from(navigator.languages || []);
+            if (langs.length === 0 && !navigator.language)
+                return { status: 'fail', value: 'none', detail: 'No language preferences set — unusual for real users' };
+            if (langs.length <= 1) {
+                const val = langs[0] || navigator.language || '—';
+                return { status: 'warn', value: val, detail: 'Only one language — real users typically accept 2+' };
+            }
+            const display = langs.slice(0, 3).join(', ') + (langs.length > 3 ? ` +${langs.length - 3}` : '');
+            return { status: 'pass', value: display, detail: `${langs.length} language preferences set` };
+        },
+    },
+    {
+        key: 'cpu',
+        name: 'CPU Cores',
+        desc: 'navigator.hardwareConcurrency — bots often report 0 or 1',
+        weight: 1,
+        run() {
+            const c = navigator.hardwareConcurrency;
+            if (!c || c === 0) return { status: 'fail', value: '0', detail: 'No CPU cores reported' };
+            if (c === 1)       return { status: 'warn', value: '1', detail: 'Single core — uncommon on modern devices' };
+            return { status: 'pass', value: String(c), detail: `${c} logical cores — consistent with real hardware` };
+        },
+    },
+    {
+        key: 'cookies',
+        name: 'Cookie Support',
+        desc: 'navigator.cookieEnabled — some sanitised automation contexts disable cookies',
+        weight: 1,
+        run() {
+            if (!navigator.cookieEnabled)
+                return { status: 'fail', value: 'disabled', detail: 'Cookies disabled — unusual for real browsers' };
+            return { status: 'pass', value: 'enabled', detail: 'Cookies enabled as expected' };
+        },
+    },
+    {
+        key: 'ua-touch',
+        name: 'UA / Touch Consistency',
+        desc: 'Cross-checks mobile UA claim vs maxTouchPoints — bots spoofing mobile UAs often miss this',
+        weight: 1,
+        run() {
+            const isMobileUA = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            const tp = navigator.maxTouchPoints || 0;
+            if (isMobileUA && tp === 0)
+                return { status: 'warn', value: `mobile UA · 0 touch pts`, detail: 'UA claims mobile but touch capability is absent — possible spoof' };
+            const label = isMobileUA ? 'mobile' : 'desktop';
+            return { status: 'pass', value: `${label} UA · ${tp} touch pts`, detail: 'UA type and touch capability are consistent' };
+        },
+    },
+];
+
+// ── BEHAVIORAL STATE ─────────────────────────────────────────────────
+
+const pts = [];
+let hasPointer = false;
+const bCards = {};
+const allMeta = []; // { weight, getStatus }
+
+document.addEventListener('mousemove', e => {
+    hasPointer = true;
+    pts.push({ x: e.clientX, y: e.clientY });
+    if (pts.length > 200) pts.shift();
+    scheduleUpdate();
+}, { passive: true });
+
+document.addEventListener('touchmove', () => {
+    hasPointer = true;
+    scheduleUpdate();
+}, { passive: true });
+
+let _lastUpdate = 0;
+function scheduleUpdate() {
+    const now = Date.now();
+    if (now - _lastUpdate > 400) { _lastUpdate = now; updateBehavioral(); }
+}
+
+function calcEntropy() {
+    if (pts.length < 10) return null;
+    let changes = 0;
+    for (let i = 2; i < pts.length; i++) {
+        const dx1 = pts[i-1].x - pts[i-2].x;
+        const dy1 = pts[i-1].y - pts[i-2].y;
+        const dx2 = pts[i].x - pts[i-1].x;
+        const dy2 = pts[i].y - pts[i-1].y;
+        const a1 = Math.atan2(dy1, dx1);
+        const a2 = Math.atan2(dy2, dx2);
+        let diff = Math.abs(a2 - a1);
+        if (diff > Math.PI) diff = 2 * Math.PI - diff;
+        if (diff > 0.08) changes++;
+    }
+    return changes / (pts.length - 2);
+}
+
+function updateBehavioral() {
+    const pCard = bCards['pointer-activity'];
+    if (pCard) {
+        if (hasPointer) {
+            patchCard(pCard, 'pass', 'detected', 'Pointer activity confirms an interactive session');
+        } else {
+            patchCard(pCard, 'fail', 'none', 'No pointer movement detected');
+        }
+    }
+
+    const eCard = bCards['mouse-entropy'];
+    if (eCard) {
+        const e = calcEntropy();
+        if (e === null) {
+            patchCard(eCard, 'pending', 'collecting…', 'Move your mouse for a few seconds');
+        } else {
+            const score = Math.round(e * 100);
+            if (e > 0.4) {
+                patchCard(eCard, 'pass', `high irregularity (${score})`, 'Curved, unpredictable path — consistent with human hand movement');
+            } else if (e > 0.2) {
+                patchCard(eCard, 'warn', `medium irregularity (${score})`, 'Moderately regular movement — borderline');
+            } else {
+                patchCard(eCard, 'fail', `low irregularity (${score})`, 'Very linear — automated tools tend to move in straight lines');
+            }
+        }
+    }
+
+    refreshScore();
+}
+
+function patchCard(card, status, value, detail) {
+    card.className = `sig-card ${status}`;
+    card._bsiStatus = status;
+    const badge = card.querySelector('.sig-badge');
+    const valEl = card.querySelector('.sig-value');
+    const detEl = card.querySelector('.sig-detail');
+    if (badge) { badge.className = `sig-badge badge-${status}`; badge.textContent = status === 'pending' ? 'Collecting' : status.toUpperCase(); }
+    if (valEl) valEl.textContent = value;
+    if (detEl) detEl.textContent = detail;
+}
+
+// ── SCORE ────────────────────────────────────────────────────────────
+
+const VERDICTS = [
+    { min: 85, label: 'Looks Human',  color: '#22c55e' },
+    { min: 65, label: 'Mostly Human', color: '#84cc16' },
+    { min: 45, label: 'Suspicious',   color: '#f59e0b' },
+    { min:  0, label: 'Bot-like',     color: '#ef4444' },
+];
+
+function refreshScore() {
+    let earned = 0, maxPts = 0, pass = 0, warn = 0, fail = 0;
+    for (const { weight, getStatus } of allMeta) {
+        const s = getStatus();
+        if (s === 'pending') continue;
+        maxPts += weight;
+        if      (s === 'pass') { earned += weight;     pass++; }
+        else if (s === 'warn') { earned += weight / 2; warn++; }
+        else if (s === 'fail') {                        fail++; }
+    }
+    const pct = maxPts ? Math.round((earned / maxPts) * 100) : 0;
+    const v   = VERDICTS.find(x => pct >= x.min) || VERDICTS[VERDICTS.length - 1];
+
+    document.getElementById('score-num').textContent     = pct;
+    const vEl = document.getElementById('score-verdict');
+    vEl.textContent = v.label;
+    vEl.style.color = v.color;
+    document.getElementById('score-sub').textContent    = `${pass + warn + fail} signals checked`;
+    document.getElementById('score-tally').textContent  = `${pass} pass · ${warn} warn · ${fail} fail`;
+
+    const bar = document.getElementById('score-bar-fill');
+    bar.style.width      = pct + '%';
+    bar.style.background = v.color;
+
+    const donut  = document.getElementById('donut-fill');
+    const filled = (pct / 100) * CIRC;
+    donut.setAttribute('stroke-dasharray', `${filled.toFixed(1)} ${CIRC.toFixed(1)}`);
+    donut.style.stroke = v.color;
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────
+
+function makeCard(name, desc, result) {
+    const d = document.createElement('div');
+    d.className    = `sig-card ${result.status}`;
+    d._bsiStatus   = result.status;
+    d.innerHTML =
+        `<div class="sig-head">` +
+            `<span class="sig-name">${name}</span>` +
+            `<span class="sig-badge badge-${result.status}">${result.status === 'pending' ? 'Collecting' : result.status.toUpperCase()}</span>` +
+        `</div>` +
+        `<div class="sig-value"></div>` +
+        `<div class="sig-detail"></div>` +
+        `<div class="sig-desc"></div>`;
+    // Use textContent to avoid any XSS from GPU vendor strings
+    d.querySelector('.sig-value').textContent  = result.value;
+    d.querySelector('.sig-detail').textContent = result.detail;
+    d.querySelector('.sig-desc').textContent   = desc;
+    return d;
+}
+
+function run() {
+    pts.length = 0;
+    hasPointer = false;
+    allMeta.length = 0;
+    Object.keys(bCards).forEach(k => delete bCards[k]);
+
+    document.getElementById('score-num').textContent     = '—';
+    document.getElementById('score-verdict').textContent = 'Analyzing…';
+    document.getElementById('score-verdict').style.color = '';
+    document.getElementById('score-sub').textContent     = 'Running signal checks';
+    document.getElementById('score-tally').textContent   = '';
+    document.getElementById('score-bar-fill').style.width = '0';
+    document.getElementById('donut-fill').setAttribute('stroke-dasharray', `0 ${CIRC.toFixed(1)}`);
+
+    // Passive
+    const pGrid = document.getElementById('passive-grid');
+    pGrid.innerHTML = '';
+    for (const sig of PASSIVE) {
+        const res  = sig.run();
+        const card = makeCard(sig.name, sig.desc, res);
+        pGrid.appendChild(card);
+        const captured = card;
+        allMeta.push({ weight: sig.weight, getStatus: () => captured._bsiStatus });
+    }
+
+    // Behavioral
+    const bGrid = document.getElementById('behavioral-grid');
+    bGrid.innerHTML = '';
+    const bDefs = [
+        { key: 'pointer-activity', name: 'Pointer Activity', desc: 'Detects any mouse or touch movement — absent in most headless sessions', weight: 2 },
+        { key: 'mouse-entropy',    name: 'Movement Entropy', desc: 'Measures irregularity of mouse path — human hands curve; bots often move in straight lines', weight: 1 },
+    ];
+    for (const b of bDefs) {
+        const res  = { status: 'pending', value: 'collecting…', detail: 'Waiting for interaction' };
+        const card = makeCard(b.name, b.desc, res);
+        bCards[b.key] = card;
+        bGrid.appendChild(card);
+        const captured = card;
+        allMeta.push({ weight: b.weight, getStatus: () => captured._bsiStatus });
+    }
+
+    // Env bar
+    document.getElementById('env-bar').textContent = `UA  ${navigator.userAgent}`;
+
+    refreshScore();
+}
+
+document.getElementById('btn-rescan').addEventListener('click', run);
+run();
+
+// Auto-tick behavioral for 30 s in case user doesn't move the mouse right away
+let ticks = 0;
+const ticker = setInterval(() => {
+    updateBehavioral();
+    if (++ticks >= 15) clearInterval(ticker);
+}, 2000);
+</script>
