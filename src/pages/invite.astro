@@ -163,37 +163,96 @@
             margin-bottom: 48px;
         }
 
-        /* ── SECRET LOTUS ─────── */
-        .lotus-wrap {
-            position: relative;
-            width: 200px;
-            height: 200px;
-            margin: 0 auto 36px;
+        /* ── NAME REVEAL SECTION ─────── */
+        .name-reveal-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            margin: 0 auto 44px;
+            max-width: 580px;
+            width: 100%;
         }
 
-        .lotus-wrap svg {
-            width: 200px;
-            height: 200px;
-            filter: drop-shadow(0 4px 24px rgba(184,134,11,0.25));
-            animation: float 4s ease-in-out infinite;
+        /* natural display — no crop, blend removes black bg */
+        .radha-img {
+            width: 260px;
+            height: auto;
+            display: block;
+            mix-blend-mode: multiply;
+            flex-shrink: 0;
+            animation: float 5s ease-in-out infinite;
+        }
+
+        .name-block {
+            flex: 1;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .name-her {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.82rem;
+            font-style: italic;
+            color: var(--muted);
+            letter-spacing: 0.1em;
+        }
+
+        .name-hint {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(1.6rem, 5vw, 2.4rem);
+            font-weight: 600;
+            font-style: italic;
+            color: var(--rust);
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+
+        .name-orn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 140px;
+        }
+
+        .name-orn-line {
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold-lt));
+        }
+
+        .name-orn-line:last-child {
+            background: linear-gradient(90deg, var(--gold-lt), transparent);
+        }
+
+        .name-orn-gem {
+            width: 6px;
+            height: 6px;
+            background: var(--gold);
+            transform: rotate(45deg);
+            flex-shrink: 0;
+        }
+
+        .name-meaning {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.78rem;
+            font-style: italic;
+            color: var(--muted);
+            letter-spacing: 0.06em;
+            line-height: 1.65;
         }
 
         @keyframes float {
             0%, 100% { transform: translateY(0); }
-            50%       { transform: translateY(-7px); }
+            50%       { transform: translateY(-8px); }
         }
 
-        .secret-label {
-            position: absolute;
-            bottom: -8px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 0.75rem;
-            font-style: italic;
-            color: var(--muted);
-            white-space: nowrap;
-            letter-spacing: 0.08em;
+        @media (max-width: 520px) {
+            .name-reveal-wrap { flex-direction: column; gap: 20px; }
+            .radha-img { width: 200px; height: auto; }
         }
 
         /* ── HEADLINE ─────────── */
@@ -477,48 +536,29 @@
         <p class="parents">Abhilash &amp; Prathibha</p>
         <p class="joy-line">joyfully invite you to the naming ceremony of their daughter</p>
 
-        <!-- SECRET LOTUS -->
-        <div class="lotus-wrap">
-            <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- outer glow ring -->
-                <circle cx="100" cy="100" r="90" stroke="rgba(184,134,11,0.12)" stroke-width="1"/>
-                <circle cx="100" cy="100" r="80" stroke="rgba(184,134,11,0.18)" stroke-width="0.5" stroke-dasharray="4 4"/>
+        <!-- NAME REVEAL -->
+        <div class="name-reveal-wrap">
 
-                <!-- petals — rear layer -->
-                <ellipse cx="100" cy="58" rx="14" ry="30" fill="rgba(194,122,122,0.55)" transform="rotate(0,100,100)"/>
-                <ellipse cx="100" cy="58" rx="14" ry="30" fill="rgba(194,122,122,0.45)" transform="rotate(45,100,100)"/>
-                <ellipse cx="100" cy="58" rx="14" ry="30" fill="rgba(194,122,122,0.45)" transform="rotate(90,100,100)"/>
-                <ellipse cx="100" cy="58" rx="14" ry="30" fill="rgba(194,122,122,0.45)" transform="rotate(135,100,100)"/>
-                <ellipse cx="100" cy="58" rx="14" ry="30" fill="rgba(194,122,122,0.45)" transform="rotate(180,100,100)"/>
-                <ellipse cx="100" cy="58" rx="14" ry="30" fill="rgba(194,122,122,0.45)" transform="rotate(225,100,100)"/>
-                <ellipse cx="100" cy="58" rx="14" ry="30" fill="rgba(194,122,122,0.45)" transform="rotate(270,100,100)"/>
-                <ellipse cx="100" cy="58" rx="14" ry="30" fill="rgba(194,122,122,0.45)" transform="rotate(315,100,100)"/>
+            <img src="/radha.png" alt="Radhe" class="radha-img" />
 
-                <!-- petals — front layer -->
-                <ellipse cx="100" cy="62" rx="11" ry="26" fill="rgba(212,140,140,0.75)" transform="rotate(22,100,100)"/>
-                <ellipse cx="100" cy="62" rx="11" ry="26" fill="rgba(212,140,140,0.75)" transform="rotate(67,100,100)"/>
-                <ellipse cx="100" cy="62" rx="11" ry="26" fill="rgba(212,140,140,0.75)" transform="rotate(112,100,100)"/>
-                <ellipse cx="100" cy="62" rx="11" ry="26" fill="rgba(212,140,140,0.75)" transform="rotate(157,100,100)"/>
-                <ellipse cx="100" cy="62" rx="11" ry="26" fill="rgba(212,140,140,0.75)" transform="rotate(202,100,100)"/>
-                <ellipse cx="100" cy="62" rx="11" ry="26" fill="rgba(212,140,140,0.75)" transform="rotate(247,100,100)"/>
-                <ellipse cx="100" cy="62" rx="11" ry="26" fill="rgba(212,140,140,0.75)" transform="rotate(292,100,100)"/>
-                <ellipse cx="100" cy="62" rx="11" ry="26" fill="rgba(212,140,140,0.75)" transform="rotate(337,100,100)"/>
+            <div class="name-block">
+                <p class="name-her">her name means</p>
+                <p class="name-hint">one of<br/>a kind</p>
+                <div class="name-orn">
+                    <div class="name-orn-line"></div>
+                    <div class="name-orn-gem"></div>
+                    <div class="name-orn-line"></div>
+                </div>
+                <p class="name-meaning">come hear it spoken aloud<br/>for the very first time</p>
+            </div>
 
-                <!-- center disc -->
-                <circle cx="100" cy="100" r="28" fill="#fdf6ec" stroke="rgba(184,134,11,0.4)" stroke-width="1.5"/>
-                <circle cx="100" cy="100" r="22" fill="rgba(240,208,128,0.18)" stroke="rgba(184,134,11,0.25)" stroke-width="1"/>
-
-                <!-- question mark -->
-                <text x="100" y="112" text-anchor="middle" font-family="Cormorant Garamond, serif" font-size="36" font-style="italic" fill="#b8860b" opacity="0.9">?</text>
-            </svg>
-            <span class="secret-label">her name blooms on the day</span>
         </div>
 
         <!-- HEADLINE -->
-        <h1 class="headline">A name <em>yet to be gifted</em><br/>to the world</h1>
+        <h1 class="headline">Unique from her<br/><em>very first breath</em></h1>
         <p class="reveal-promise">
-            Her name is a secret held close, waiting to be whispered<br/>
-            to the universe for the very first time — on this auspicious day.
+            She carries a name unlike any other — singular, incomparable,<br/>
+            entirely her own. Come be with us as we gift it to the world.
         </p>
 
         <!-- ORNAMENT -->
@@ -583,7 +623,7 @@
                 T. Dasarahalli, Bengaluru, Karnataka 560073
             </p>
             <a
-                href="https://maps.google.com/maps?q=2GW4%2BPX+Bengaluru,+Karnataka"
+                href="https://maps.app.goo.gl/vPKGmuuVLxTJwYp66"
                 target="_blank"
                 rel="noopener"
                 class="directions-btn"
