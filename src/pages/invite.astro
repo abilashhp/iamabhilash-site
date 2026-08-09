@@ -358,52 +358,35 @@
             font-style: italic;
         }
 
-        /* ── SCHEDULE ─────────── */
-        .schedule {
+        /* ── LUNCH NOTE ─────────── */
+        .lunch-note {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            gap: 0;
-            margin-bottom: 40px;
-            border: 1px solid rgba(184,134,11,0.15);
-            border-radius: 2px;
-            overflow: hidden;
+            gap: 5px;
+            padding: 18px 64px;
+            border-top: 1px solid rgba(184,134,11,0.22);
+            border-bottom: 1px solid rgba(184,134,11,0.22);
+            margin: 0 auto 40px;
+            width: fit-content;
         }
 
-        .sched-item {
-            flex: 1;
-            padding: 20px 20px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            background: rgba(240,208,128,0.05);
-        }
+        .lunch-icon { font-size: 1.3rem; margin-bottom: 2px; }
 
-        .sched-sep {
-            width: 1px;
-            align-self: stretch;
-            background: rgba(184,134,11,0.15);
-            flex-shrink: 0;
-        }
-
-        .sched-icon {
-            font-size: 1.5rem;
-            flex-shrink: 0;
-        }
-
-        .sched-time {
+        .lunch-time {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 1.3rem;
+            font-size: 1.7rem;
             font-weight: 600;
             color: var(--deep);
             line-height: 1;
         }
 
-        .sched-desc {
+        .lunch-desc {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 0.85rem;
-            color: var(--muted);
+            font-size: 0.88rem;
             font-style: italic;
+            color: var(--muted);
+            letter-spacing: 0.06em;
         }
 
         /* ── VENUE ────────────── */
@@ -585,23 +568,11 @@
             </div>
         </div>
 
-        <!-- SCHEDULE -->
-        <div class="schedule">
-            <div class="sched-item">
-                <span class="sched-icon">🪔</span>
-                <div style="text-align:left;">
-                    <div class="sched-time">10:15 AM</div>
-                    <div class="sched-desc">Naming Ceremony</div>
-                </div>
-            </div>
-            <div class="sched-sep"></div>
-            <div class="sched-item">
-                <span class="sched-icon">🍱</span>
-                <div style="text-align:left;">
-                    <div class="sched-time">12:00 PM</div>
-                    <div class="sched-desc">Lunch &amp; Celebration</div>
-                </div>
-            </div>
+        <!-- LUNCH NOTE -->
+        <div class="lunch-note">
+            <span class="lunch-icon">🍱</span>
+            <div class="lunch-time">12:00 PM</div>
+            <div class="lunch-desc">Lunch &amp; Celebration</div>
         </div>
 
         <!-- ORNAMENT -->
