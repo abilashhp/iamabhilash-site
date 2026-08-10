@@ -83,19 +83,19 @@
 
         .top-tag {
             font-family: 'Cinzel', serif;
-            font-size: 0.55rem;
-            letter-spacing: 0.38em;
-            color: rgba(240,208,128,0.75);
+            font-size: 0.68rem;
+            letter-spacing: 0.3em;
+            color: rgba(240,208,128,0.95);
             text-transform: uppercase;
             margin-bottom: 8px;
         }
 
         .kannada {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 2.4rem;
-            font-weight: 300;
+            font-size: 2.6rem;
+            font-weight: 500;
             font-style: italic;
-            color: #d4a843;
+            color: #f0d080;
             line-height: 1;
             letter-spacing: 0.04em;
         }
@@ -136,16 +136,17 @@
 
         .her-name-means {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 0.75rem;
+            font-size: 0.9rem;
+            font-weight: 500;
             font-style: italic;
-            color: #9c7d6a;
-            letter-spacing: 0.1em;
+            color: #6b3c2a;
+            letter-spacing: 0.08em;
         }
 
         .name-hint {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 2rem;
-            font-weight: 600;
+            font-size: 2.2rem;
+            font-weight: 700;
             font-style: italic;
             color: #9e3d2a;
             line-height: 1.15;
@@ -178,10 +179,11 @@
 
         .come-hear {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 0.7rem;
+            font-size: 0.88rem;
+            font-weight: 500;
             font-style: italic;
-            color: #9c7d6a;
-            letter-spacing: 0.06em;
+            color: #6b3c2a;
+            letter-spacing: 0.04em;
             line-height: 1.65;
         }
 
@@ -201,8 +203,8 @@
 
         .info-label {
             font-family: 'Cinzel', serif;
-            font-size: 0.48rem;
-            letter-spacing: 0.3em;
+            font-size: 0.62rem;
+            letter-spacing: 0.22em;
             text-transform: uppercase;
             color: #b8860b;
             margin-bottom: 6px;
@@ -210,8 +212,8 @@
 
         .info-main {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 1.2rem;
-            font-weight: 600;
+            font-size: 1.35rem;
+            font-weight: 700;
             color: #3a1f0f;
             line-height: 1.1;
             margin-bottom: 2px;
@@ -219,9 +221,10 @@
 
         .info-sub {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 0.78rem;
+            font-size: 0.88rem;
+            font-weight: 500;
             font-style: italic;
-            color: #9c7d6a;
+            color: #6b3c2a;
         }
 
         /* ─── BOTTOM BAND (dark — mirrors the invite footer) ─── */
@@ -233,36 +236,77 @@
 
         .hosts {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 1.45rem;
-            font-weight: 600;
+            font-size: 1.6rem;
+            font-weight: 700;
             font-style: italic;
-            color: #d4a843;
+            color: #f0d080;
             margin-bottom: 5px;
         }
 
         .timing {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 0.82rem;
+            font-size: 0.92rem;
+            font-weight: 500;
             font-style: italic;
-            color: rgba(240,208,128,0.6);
+            color: rgba(240,208,128,0.9);
             letter-spacing: 0.05em;
             margin-bottom: 12px;
         }
 
         .link-label {
             font-family: 'Cinzel', serif;
-            font-size: 0.5rem;
-            letter-spacing: 0.28em;
+            font-size: 0.62rem;
+            letter-spacing: 0.22em;
             text-transform: uppercase;
-            color: rgba(240,208,128,0.5);
+            color: rgba(240,208,128,0.75);
+            margin-bottom: 3px;
+        }
+
+        .footer-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            border-top: 1px solid rgba(240,208,128,0.2);
+            padding-top: 12px;
+        }
+
+        .footer-col {
+            flex: 1;
+            text-align: center;
+        }
+
+        .footer-sep {
+            width: 1px;
+            height: 36px;
+            background: rgba(240,208,128,0.25);
+            flex-shrink: 0;
+            margin: 0 8px;
+        }
+
+        .link-label, .contact-label {
+            font-family: 'Cinzel', serif;
+            font-size: 0.55rem;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: rgba(240,208,128,0.7);
             margin-bottom: 3px;
         }
 
         .link-url {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 0.88rem;
+            font-size: 0.95rem;
+            font-weight: 500;
             font-style: italic;
-            color: #d4a843;
+            color: #f0d080;
+            letter-spacing: 0.02em;
+        }
+
+        .contact-num {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #f0d080;
             letter-spacing: 0.04em;
         }
     </style>
@@ -318,8 +362,17 @@
     <div class="bottom-band">
         <p class="hosts">Abhilash &amp; Prathibha</p>
         <p class="timing">Ceremony 10:15 AM &nbsp;·&nbsp; Lunch 12:00 PM</p>
-        <p class="link-label">full invite &amp; directions at</p>
-        <p class="link-url">iamabhilash.in/invite</p>
+        <div class="footer-row">
+            <div class="footer-col">
+                <p class="link-label">full invite &amp; directions</p>
+                <p class="link-url">iamabhilash.in/invite</p>
+            </div>
+            <div class="footer-sep"></div>
+            <div class="footer-col">
+                <p class="contact-label">call or whatsapp</p>
+                <p class="contact-num">+91 63612 51166</p>
+            </div>
+        </div>
     </div>
 
 </div>
