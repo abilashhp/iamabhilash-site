@@ -1,16 +1,16 @@
 ---
-// Naming Ceremony — WhatsApp postcard (screenshot and share)
+// Naming Ceremony — WhatsApp postcard (Kannada version)
 ---
 <!doctype html>
-<html lang="en">
+<html lang="kn">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
-    <title>Invite Card — Naming Ceremony</title>
+    <title>ಆಮಂತ್ರಣ — ನಾಮಕರಣ ಸಮಾರಂಭ</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=Cinzel:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Kannada:wght@300;400;500;600;700&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet" />
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -63,7 +63,6 @@
             overflow: hidden;
         }
 
-        /* inner inset border */
         .card::after {
             content: '';
             position: absolute;
@@ -73,38 +72,34 @@
             z-index: 10;
         }
 
-        /* ─── TOP BAND (dark — mirrors the invite header) ─── */
+        /* ─── TOP BAND ─── */
         .top-band {
-            padding: 22px 48px 18px;
+            padding: 26px 48px 22px;
             text-align: center;
             background: linear-gradient(135deg, #3a1f0f 0%, #9e3d2a 50%, #3a1f0f 100%);
-            position: relative;
         }
 
         .top-tag {
-            font-family: 'Cinzel', serif;
-            font-size: 0.68rem;
-            letter-spacing: 0.3em;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.78rem;
+            font-weight: 500;
             color: rgba(240,208,128,0.95);
-            text-transform: uppercase;
             margin-bottom: 8px;
         }
 
-        .kannada {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 2.6rem;
-            font-weight: 500;
-            font-style: italic;
+        .kannada-main {
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 2.5rem;
+            font-weight: 600;
             color: #f0d080;
-            line-height: 1;
-            letter-spacing: 0.04em;
+            line-height: 1.1;
         }
 
         .gold-rule {
             width: 100px;
             height: 1px;
             background: linear-gradient(90deg, transparent, #d4a843, transparent);
-            margin: 10px auto 0;
+            margin: 12px auto 4px;
         }
 
         /* ─── BLESSING BAND ─── */
@@ -116,12 +111,11 @@
         }
 
         .invocation {
-            font-family: 'Cormorant Garamond', serif;
+            font-family: 'Noto Serif Kannada', serif;
             font-size: 0.78rem;
             font-weight: 700;
             color: #9e6b00;
-            letter-spacing: 0.01em;
-            line-height: 1.3;
+            line-height: 1.4;
         }
 
         .inv-sep {
@@ -147,26 +141,23 @@
         }
 
         .elders-line {
-            font-family: 'Cinzel', serif;
-            font-size: 0.58rem;
-            font-weight: 500;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.65rem;
+            font-weight: 600;
             color: #b8860b;
             margin: 8px 0 4px;
             opacity: 0.85;
         }
 
         .blessing-text {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 0.88rem;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.82rem;
             font-weight: 500;
-            font-style: italic;
             color: #6b3c2a;
-            line-height: 1.6;
+            line-height: 1.7;
         }
 
-        /* ─── MIDDLE: image + name hint ─── */
+        /* ─── MIDDLE ─── */
         .middle {
             display: flex;
             align-items: center;
@@ -175,7 +166,6 @@
             background: #fdf6ec;
         }
 
-        /* multiply removes black bg on ivory */
         .radha-img {
             width: 192px;
             height: auto;
@@ -190,25 +180,22 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 7px;
+            gap: 10px;
         }
 
         .her-name-means {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 0.85rem;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.88rem;
             font-weight: 500;
-            font-style: italic;
             color: #6b3c2a;
-            letter-spacing: 0.08em;
         }
 
         .name-hint {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1.55rem;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 2rem;
             font-weight: 700;
-            font-style: italic;
             color: #9e3d2a;
-            line-height: 1.2;
+            line-height: 1.25;
         }
 
         .orn {
@@ -237,13 +224,11 @@
         }
 
         .come-hear {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 0.8rem;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.82rem;
             font-weight: 500;
-            font-style: italic;
             color: #6b3c2a;
-            letter-spacing: 0.02em;
-            line-height: 1.5;
+            line-height: 1.7;
         }
 
         /* ─── DATE + VENUE ROW ─── */
@@ -258,35 +243,33 @@
 
         .info-sep { background: rgba(184,134,11,0.2); }
 
-        .info-cell { padding: 18px 16px; }
+        .info-cell { padding: 16px 14px; }
 
         .info-label {
-            font-family: 'Cinzel', serif;
-            font-size: 0.62rem;
-            letter-spacing: 0.22em;
-            text-transform: uppercase;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.7rem;
+            font-weight: 600;
             color: #b8860b;
             margin-bottom: 6px;
         }
 
         .info-main {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1.35rem;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 1.2rem;
             font-weight: 700;
             color: #3a1f0f;
-            line-height: 1.1;
+            line-height: 1.2;
             margin-bottom: 2px;
         }
 
         .info-sub {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 0.88rem;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.82rem;
             font-weight: 500;
-            font-style: italic;
             color: #6b3c2a;
         }
 
-        /* ─── BOTTOM BAND (dark — mirrors the invite footer) ─── */
+        /* ─── BOTTOM BAND ─── */
         .bottom-band {
             background: linear-gradient(135deg, #3a1f0f 0%, #9e3d2a 50%, #3a1f0f 100%);
             padding: 18px 48px 22px;
@@ -294,31 +277,19 @@
         }
 
         .hosts {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1.6rem;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 1.5rem;
             font-weight: 700;
-            font-style: italic;
             color: #f0d080;
             margin-bottom: 5px;
         }
 
         .timing {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 0.92rem;
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.88rem;
             font-weight: 500;
-            font-style: italic;
             color: rgba(240,208,128,0.9);
-            letter-spacing: 0.05em;
             margin-bottom: 12px;
-        }
-
-        .link-label {
-            font-family: 'Cinzel', serif;
-            font-size: 0.62rem;
-            letter-spacing: 0.22em;
-            text-transform: uppercase;
-            color: rgba(240,208,128,0.75);
-            margin-bottom: 3px;
         }
 
         .footer-row {
@@ -330,10 +301,7 @@
             padding-top: 12px;
         }
 
-        .footer-col {
-            flex: 1;
-            text-align: center;
-        }
+        .footer-col { flex: 1; text-align: center; }
 
         .footer-sep {
             width: 1px;
@@ -343,22 +311,21 @@
             margin: 0 8px;
         }
 
-        .link-label, .contact-label {
-            font-family: 'Cinzel', serif;
-            font-size: 0.55rem;
-            letter-spacing: 0.2em;
-            text-transform: uppercase;
-            color: rgba(240,208,128,0.7);
+        .footer-label {
+            font-family: 'Noto Serif Kannada', serif;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: rgba(240,208,128,0.75);
             margin-bottom: 3px;
         }
 
+        /* URL stays in Latin font */
         .link-url {
             font-family: 'Cormorant Garamond', serif;
             font-size: 0.95rem;
             font-weight: 500;
             font-style: italic;
             color: #f0d080;
-            letter-spacing: 0.02em;
         }
 
         .contact-num {
@@ -376,66 +343,65 @@
     Download the card below and share on WhatsApp<br/>
     along with the full invite link: <strong style="color:#666;">iamabhilash.in/invite</strong>
 </p>
-<button class="download-btn" id="dlBtn">⬇ Download Postcard</button>
+<button class="download-btn" id="dlBtn">⬇ Download Postcard (ಕನ್ನಡ)</button>
 
 <div class="card" id="card">
 
     <!-- TOP -->
     <div class="top-band">
-        <p class="top-tag">Namakarana &middot; Naming Ceremony</p>
-        <p class="kannada">ನಾಮಕರಣ</p>
+        <p class="kannada-main">ನಾಮಕರಣ</p>
         <div class="gold-rule"></div>
     </div>
 
     <!-- BLESSING -->
     <div class="blessing-band">
         <p class="invocation">ಓಂ ನಮೋ ಭಗವತೇ ವಾಸುದೇವಾಯ &nbsp;·&nbsp; ಶ್ರೀ ರಾಘವೇಂದ್ರಾಯ ನಮಃ &nbsp;·&nbsp; ಓಂ ಶ್ರೀ ಭೈರವೇಶ್ವರಾಯ ನಮಃ</p>
-        <p class="elders-line">With the blessings of our parents &amp; elders</p>
-        <p class="blessing-text">By their grace, our daughter has come to us.<br/>We are delighted to invite you.</p>
+        <p class="elders-line">ನಮ್ಮ ಹಿರಿಯರ ಮತ್ತು ತಂದೆ-ತಾಯಿಯ ಆಶೀರ್ವಾದದೊಂದಿಗೆ</p>
+        <p class="blessing-text">ಅವರ ಅನುಗ್ರಹದಿಂದ ನಮ್ಮ ಮಗಳು ನಮ್ಮ ಬಳಿಗೆ ಬಂದಿದ್ದಾಳೆ.<br/>ನಿಮ್ಮನ್ನು ಆಮಂತ್ರಿಸಲು ನಾವು ಸಂತೋಷಪಡುತ್ತೇವೆ.</p>
     </div>
 
     <!-- MIDDLE -->
     <div class="middle">
         <img src="/radha.png" alt="" class="radha-img" />
         <div class="name-col">
-            <p class="her-name-means">her name means</p>
-            <p class="name-hint">one of a kind</p>
+            <p class="her-name-means">ಅವಳ ಹೆಸರಿನ ಅರ್ಥ</p>
+            <p class="name-hint">ಅಪ್ರತಿಮ</p>
             <div class="orn">
                 <div class="orn-line"></div>
                 <div class="orn-gem"></div>
                 <div class="orn-line"></div>
             </div>
-            <p class="come-hear">come hear it spoken aloud<br/>for the very first time</p>
+            <p class="come-hear">ಮೊದಲ ಬಾರಿ ಆ ಹೆಸರನ್ನು<br/>ಕೇಳಿ ಬನ್ನಿ</p>
         </div>
     </div>
 
     <!-- DATE + VENUE -->
     <div class="info-row">
         <div class="info-cell">
-            <p class="info-label">Date &amp; Time</p>
-            <p class="info-main">September 21</p>
-            <p class="info-sub">Monday, 2026 · 10:15 AM</p>
+            <p class="info-label">ದಿನಾಂಕ ಮತ್ತು ಸಮಯ</p>
+            <p class="info-main">ಸೆಪ್ಟೆಂಬರ್ 21</p>
+            <p class="info-sub">ಸೋಮವಾರ, 2026 · ಬೆಳಗ್ಗೆ 10:15</p>
         </div>
         <div class="info-sep"></div>
         <div class="info-cell">
-            <p class="info-label">Venue</p>
-            <p class="info-main">V One Hotel</p>
-            <p class="info-sub">Ambara Elite, Bengaluru</p>
+            <p class="info-label">ಸ್ಥಳ</p>
+            <p class="info-main">ವಿ ಒನ್ ಹೋಟೆಲ್</p>
+            <p class="info-sub">ಅಂಬರ ಎಲೀಟ್, ಬೆಂಗಳೂರು</p>
         </div>
     </div>
 
     <!-- BOTTOM -->
     <div class="bottom-band">
-        <p class="hosts">Abhilash &amp; Prathibha</p>
-        <p class="timing">Ceremony 10:15 AM &nbsp;·&nbsp; Lunch 12:00 PM</p>
+        <p class="hosts">ಅಭಿಲಾಶ್ &amp; ಪ್ರತಿಭಾ</p>
+        <p class="timing">ಸಮಾರಂಭ 10:15 AM &nbsp;·&nbsp; ಊಟ 12:00 PM</p>
         <div class="footer-row">
             <div class="footer-col">
-                <p class="link-label">full invite &amp; directions</p>
+                <p class="footer-label">ಪೂರ್ಣ ಆಮಂತ್ರಣ ಮತ್ತು ದಾರಿ</p>
                 <p class="link-url">iamabhilash.in/invite</p>
             </div>
             <div class="footer-sep"></div>
             <div class="footer-col">
-                <p class="contact-label">call or whatsapp</p>
+                <p class="footer-label">ಕರೆ ಮಾಡಿ ಅಥವಾ ವಾಟ್ಸಾಪ್</p>
                 <p class="contact-num">+91 63612 51166</p>
             </div>
         </div>
@@ -464,27 +430,26 @@
             const card = document.getElementById('card');
             const img = card.querySelector('.radha-img');
 
-            // swap to inline base64 so the renderer has no external fetches
             const originalSrc = img.src;
             img.src = await imgToDataUrl('/radha.png');
             await new Promise(function(r) { setTimeout(r, 80); });
 
             const opts = { pixelRatio: 2 };
-            await htmlToImage.toPng(card, opts);          // first pass — loads fonts
-            const dataUrl = await htmlToImage.toPng(card, opts); // second pass — renders them
+            await htmlToImage.toPng(card, opts);
+            const dataUrl = await htmlToImage.toPng(card, opts);
 
-            img.src = originalSrc; // restore
+            img.src = originalSrc;
 
             const link = document.createElement('a');
-            link.download = 'naming-ceremony-invite.png';
+            link.download = 'naming-ceremony-invite-kn.png';
             link.href = dataUrl;
             link.click();
 
-            btn.textContent = '⬇ Download Postcard';
+            btn.textContent = '⬇ Download Postcard (ಕನ್ನಡ)';
         } catch (err) {
             console.error('Download error:', err);
             btn.textContent = 'Failed — please screenshot the card';
-            setTimeout(function() { btn.textContent = '⬇ Download Postcard'; }, 3000);
+            setTimeout(function() { btn.textContent = '⬇ Download Postcard (ಕನ್ನಡ)'; }, 3000);
         }
 
         btn.disabled = false;

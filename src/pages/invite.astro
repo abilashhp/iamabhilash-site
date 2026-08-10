@@ -163,6 +163,70 @@
             margin-bottom: 48px;
         }
 
+        /* ── BLESSING SECTION ─────── */
+        .blessing-section {
+            background: linear-gradient(180deg, rgba(184,134,11,0.08) 0%, rgba(184,134,11,0.02) 100%);
+            border-bottom: 1px solid rgba(184,134,11,0.2);
+            padding: 22px 48px 18px;
+            text-align: center;
+            margin: -52px -64px 40px;
+        }
+
+        @media (max-width: 600px) {
+            .blessing-section { margin: -36px -28px 32px; padding: 18px 24px 16px; }
+        }
+
+        .inv-invocation {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: var(--gold);
+            letter-spacing: 0.01em;
+            line-height: 1.3;
+        }
+
+        .inv-sep {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 8px auto;
+            width: 120px;
+        }
+
+        .inv-sep-line {
+            flex: 1;
+            height: 1px;
+            background: rgba(184,134,11,0.35);
+        }
+
+        .inv-sep-gem {
+            width: 5px;
+            height: 5px;
+            background: var(--gold);
+            transform: rotate(45deg);
+            flex-shrink: 0;
+        }
+
+        .inv-elders {
+            font-family: 'Cinzel', serif;
+            font-size: 0.6rem;
+            font-weight: 500;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin: 10px 0 5px;
+            opacity: 0.85;
+        }
+
+        .inv-blessing-text {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1rem;
+            font-weight: 500;
+            font-style: italic;
+            color: var(--mid);
+            line-height: 1.65;
+        }
+
         /* ── NAME REVEAL SECTION ─────── */
         .name-reveal-wrap {
             display: flex;
@@ -521,6 +585,13 @@
 
     <!-- MAIN BODY -->
     <div class="body">
+
+        <!-- BLESSING -->
+        <div class="blessing-section">
+            <p class="inv-invocation">ಓಂ ನಮೋ ಭಗವತೇ ವಾಸುದೇವಾಯ &nbsp;·&nbsp; ಶ್ರೀ ರಾಘವೇಂದ್ರಾಯ ನಮಃ &nbsp;·&nbsp; ಓಂ ಶ್ರೀ ಭೈರವೇಶ್ವರಾಯ ನಮಃ</p>
+            <p class="inv-elders">With the blessings of our parents &amp; elders</p>
+            <p class="inv-blessing-text">By their grace, our daughter has come to us.<br/>We are delighted to invite you.</p>
+        </div>
 
         <p class="from-line">With overflowing joy,</p>
         <p class="parents">Abhilash &amp; Prathibha</p>
