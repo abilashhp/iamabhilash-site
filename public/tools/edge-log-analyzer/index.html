@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Log Analyzer — Abhilash HP</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:      #f9f9f7;
+    --text-primary:    #0b0b0b;
+    --text-secondary:  #52514e;
+    --text-muted:      #898781;
+    --gridline:        #e1e0d9;
+    --baseline:        #c3c2b7;
+    --border:          rgba(11,11,11,0.10);
+    --series-1:        #2a78d6; /* blue */
+    --series-2:        #eb6834; /* orange */
+    --series-3:        #1baf7a; /* aqua */
+    --good:            #0ca30c;
+    --warning:         #fab219;
+    --serious:         #ec835a;
+    --critical:        #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:      #0d0d0d;
+      --text-primary:    #ffffff;
+      --text-secondary:  #c3c2b7;
+      --text-muted:      #898781;
+      --gridline:        #2c2c2a;
+      --baseline:        #383835;
+      --border:          rgba(255,255,255,0.10);
+      --series-1:        #3987e5;
+      --series-2:        #d95926;
+      --series-3:        #199e70;
+      --good:            #0ca30c;
+      --warning:         #fab219;
+      --serious:         #ec835a;
+      --critical:        #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page-plane:      #0d0d0d;
+    --text-primary:    #ffffff;
+    --text-secondary:  #c3c2b7;
+    --text-muted:      #898781;
+    --gridline:        #2c2c2a;
+    --baseline:        #383835;
+    --border:          rgba(255,255,255,0.10);
+    --series-1:        #3987e5;
+    --series-2:        #d95926;
+    --series-3:        #199e70;
+    --good:            #0ca30c;
+    --warning:         #fab219;
+    --serious:         #ec835a;
+    --critical:        #e66767;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    padding: 24px;
+  }
+  nav.site-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    max-width: 1280px; margin: 0 auto 16px; padding: 10px 2px;
+    border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  nav.site-nav a { color: var(--text-secondary); text-decoration: none; }
+  nav.site-nav a:hover { color: var(--text-primary); }
+  header { max-width: 1280px; margin: 0 auto 16px; }
+  header h1 { font-size: 20px; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--text-secondary); font-size: 13px; }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; margin-left: 8px; vertical-align: middle;
+  }
+  .badge.NORMAL { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); }
+  .badge.WARN { background: var(--warning); color: #3a2a00; }
+  .badge.CRITICAL { background: color-mix(in srgb, var(--critical) 25%, transparent); color: var(--critical); }
+  .wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+  .upload-card {
+    background: var(--surface-1); border: 1px dashed var(--border); border-radius: 10px;
+    padding: 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    transition: border-color .15s, background .15s;
+  }
+  .upload-card.dragover { border-color: var(--series-1); background: color-mix(in srgb, var(--series-1) 6%, var(--surface-1)); }
+  .upload-card .drop-label { flex: 1; min-width: 220px; }
+  .upload-card .drop-label strong { font-size: 13px; }
+  .upload-card .drop-label span { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 7px;
+    border: 1px solid var(--border); background: var(--page-plane); color: var(--text-primary);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn.primary { background: var(--series-1); color: #fff; border-color: transparent; }
+  .btn:hover { filter: brightness(0.97); }
+  #fileInput { display: none; }
+  #uploadStatus { font-size: 12px; color: var(--text-muted); width: 100%; margin-top: 4px; }
+  #uploadStatus.error { color: var(--critical); }
+  #uploadStatus.success { color: var(--good); }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  @media (max-width: 1100px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 640px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .kpi .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .value { font-size: 26px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi .sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .kpi.good .value { color: var(--good); }
+  .kpi.warn .value { color: var(--serious); }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .card h2 { font-size: 14px; margin: 0 0 2px; }
+  .card .hint { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
+  .chart-box { position: relative; height: 220px; }
+  .chart-box.tall { height: 300px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--gridline); }
+  th { color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; cursor: pointer; user-select: none; }
+  th:hover { color: var(--text-primary); }
+  tr:hover td { background: color-mix(in srgb, var(--series-1) 6%, transparent); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.s2 { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+  .pill.s4 { background: color-mix(in srgb, var(--serious) 22%, transparent); color: var(--serious); }
+  .pill.s3 { background: color-mix(in srgb, var(--series-1) 18%, transparent); color: var(--series-1); }
+  .filter-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .filter-row input {
+    flex: 1; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--page-plane); color: var(--text-primary); font-size: 13px;
+  }
+  .foot-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  details summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
+  code { font-size: 12px; background: color-mix(in srgb, var(--text-muted) 15%, transparent); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a href="/tools">← Tools</a>
+  <a href="https://github.com/abilashhp/edge-log-analyzer" target="_blank" rel="noopener">View source ↗</a>
+</nav>
+
+<header>
+  <h1 id="pageTitle">Edge Log Analysis — Sample Data <span id="statusBadge" class="badge WARN">WARN</span></h1>
+  <p id="pageSubtitle">Observed window: 2026-09-17 10:12:01 → 19:59:11 UTC (≈9h47m) · 559 client-facing requests · 441 origin/forward legs</p>
+</header>
+
+<div class="wrap">
+
+  <div class="upload-card" id="dropZone">
+    <div class="drop-label">
+      <strong>Upload raw log file(s) to refresh this dashboard</strong>
+      <span>Drag &amp; drop, or choose files — parsed entirely in your browser, nothing is uploaded anywhere. Supports the Akamai edge/WAF delivery log format (space-delimited records, type <code>r</code>/<code>f</code>).</span>
+      <span id="uploadStatus"></span>
+    </div>
+    <button class="btn primary" id="chooseBtn">Choose files…</button>
+    <button class="btn" id="resetBtn">Reset to sample data</button>
+    <input type="file" id="fileInput" multiple accept=".txt,.log,.csv">
+  </div>
+
+  <div class="kpi-row">
+    <div class="card kpi">
+      <div class="label">Total Requests</div>
+      <div class="value" id="kpiTotal">559</div>
+      <div class="sub" id="kpiTotalSub">+441 origin-leg records</div>
+    </div>
+    <div class="card kpi good" id="kpi404Card">
+      <div class="label">404 Rate</div>
+      <div class="value" id="kpi404">0.0%</div>
+      <div class="sub" id="kpi404Sub">0 of 559</div>
+    </div>
+    <div class="card kpi good" id="kpi5xxCard">
+      <div class="label">5xx Error Count</div>
+      <div class="value" id="kpi5xx">0</div>
+      <div class="sub" id="kpi5xxSub">no server errors observed</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">p95 Latency</div>
+      <div class="value" id="kpiP95">165ms</div>
+      <div class="sub" id="kpiP95Sub">p50 0ms · p99 336ms · max 862ms</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">Peak RPS</div>
+      <div class="value" id="kpiPeakRps">0.9</div>
+      <div class="sub">max in any rolling 60s window</div>
+    </div>
+    <div class="card kpi warn" id="kpiBlockCard">
+      <div class="label">WAF / Challenge Blocks</div>
+      <div class="value" id="kpiBlocks">106</div>
+      <div class="sub" id="kpiBlocksSub">103×403 + 3×429 (19.0%)</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Requests Per Second — over time</h2>
+      <p class="hint">30 equal-width bins across the full observed window</p>
+      <div class="chart-box"><canvas id="rpsChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>p95 Latency (ms) — over time</h2>
+      <p class="hint">Same timeline bins as RPS, shown separately (no dual-axis)</p>
+      <div class="chart-box"><canvas id="latChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Response Code Distribution</h2>
+      <p class="hint" id="statusHint">559 client-facing requests</p>
+      <div class="chart-box"><canvas id="statusChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Top 5 Blocked / Error Endpoints</h2>
+      <p class="hint" id="failHint">404 + 5xx = 0 in this sample — shown instead: 4xx (WAF-blocked + rate-limited) by normalized endpoint</p>
+      <div class="chart-box"><canvas id="failChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Top 10 Slowest Endpoints (p95 edge time, ms)</h2>
+    <p class="hint">Normalized paths (IDs/tokens collapsed); minimum 2 samples per endpoint</p>
+    <div class="chart-box tall"><canvas id="slowChart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Suspicious Client IPs</h2>
+    <p class="hint">Top request sources, ranked by volume — click column headers to sort</p>
+    <div class="filter-row">
+      <input id="ipFilter" type="text" placeholder="Filter by IP, status, WAF reason, or user-agent…">
+    </div>
+    <table id="ipTable">
+      <thead>
+        <tr>
+          <th data-key="ip">IP</th>
+          <th data-key="requests">Requests</th>
+          <th data-key="blocked">Blocked (403/429)</th>
+          <th data-key="top_status">Top Status</th>
+          <th data-key="waf_reason">WAF Reason</th>
+          <th data-key="hosts"># Hosts</th>
+          <th data-key="ua_sample">Sample User-Agent</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <details>
+    <summary>Raw aggregate data (status codes, security pattern hits, origin hosts)</summary>
+    <div class="card" style="margin-top:8px;">
+      <table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody id="rawTable"></tbody>
+      </table>
+      <p class="foot-note">
+        Latency figures use the edge log's positional numeric field inferred as processing time (ms) — no published
+        field schema was available for this log format, so treat as a best-effort proxy rather than certified origin timing.
+        Format: Akamai edge/WAF delivery log, record types <code>r</code> (client request) and <code>f</code> (origin/forward leg).
+      </p>
+    </div>
+  </details>
+
+</div>
+
+<script>
+/* ---------- Sample dataset (shown on first load) ---------- */
+const SAMPLE_DATA = {
+  meta: {
+    title: "Sample Data",
+    subtitle: "Observed window: 2026-09-17 10:12:01 → 19:59:11 UTC (≈9h47m) · 559 client-facing requests · 441 origin/forward legs",
+    statusBadge: "WARN"
+  },
+  kpis: {
+    total: 559, totalSub: "+441 origin-leg records",
+    rate404: "0.0%", rate404Sub: "0 of 559", good404: true,
+    count5xx: 0, count5xxSub: "no server errors observed", good5xx: true,
+    p95: "165ms", p95Sub: "p50 0ms · p99 336ms · max 862ms",
+    peakRps: "0.9",
+    blocks: 106, blocksSub: "103×403 + 3×429 (19.0%)"
+  },
+  timeline: {
+    labels: ["10:12","10:31","10:51","11:10","11:30","11:49","12:09","12:29","12:48","13:08","13:27","13:47","14:06","14:26","14:46","15:05","15:25","15:44","16:04","16:23","16:43","17:03","17:22","17:42","18:01","18:21","18:40","19:00","19:20","19:39"],
+    rps: [0.0085,0.006,0.0264,0.0034,0.0332,0.0051,0.0077,0.0043,0.0068,0.0034,0.0409,0.0051,0.0017,0.0221,0.0204,0.0502,0.0179,0.0153,0.0043,0.0102,0.0034,0.029,0.0324,0.0094,0.0187,0.0375,0.0179,0.006,0.0026,0.0264],
+    p95:  [127.0,113.2,167.0,0.0,180.4,47.8,191.8,85.8,211.4,228.4,140.5,23.5,193.9,89.8,66.6,15.3,136.0,178.8,41.4,0.0,56.8,177.2,210.0,52.0,99.6,160.0,70.0,0.0,0.0,160.8]
+  },
+  statusBuckets: { "2xx": 290, "3xx": 161, "4xx": 108, "5xx": 0 },
+  statusHint: "559 client-facing requests",
+  failHint: "404 + 5xx = 0 in this sample — shown instead: 4xx (WAF-blocked + rate-limited) by normalized endpoint",
+  topFail: [
+    {endpoint: "/ws/LegacyAuthGateway.dll", count: 55},
+    {endpoint: "/ (root)", count: 18},
+    {endpoint: "/signin", count: 4},
+    {endpoint: "/.env", count: 1},
+    {endpoint: "/.env.local", count: 1}
+  ],
+  topSlow: [
+    {endpoint: "/ws/LegacyAuthGateway.dll", p95: 464.2, count: 68},
+    {endpoint: "/signin/", p95: 226.4, count: 17},
+    {endpoint: "signin.example.co.uk /", p95: 203.2, count: 5},
+    {endpoint: "signin.example.co.uk /signin/", p95: 201.9, count: 12},
+    {endpoint: "/signin", p95: 200.0, count: 11},
+    {endpoint: "signin.example.de /signin/", p95: 199.2, count: 14},
+    {endpoint: "/signin/s", p95: 183.7, count: 44},
+    {endpoint: "/ (root)", p95: 160.0, count: 20},
+    {endpoint: "/favicon.ico", p95: 132.0, count: 21},
+    {endpoint: "signin.example.co.uk /signin/{token}", p95: 131.1, count: 2}
+  ],
+  ipTable: [
+    {ip:"203.0.113.10", requests:50, blocked:50, top_status:"403", waf_reason:"waf_deny|custom_rule_match", hosts:1, ua_sample:"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:127.0)"},
+    {ip:"198.51.100.21", requests:23, blocked:0, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"198.51.100.42", requests:19, blocked:0, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"203.0.113.55", requests:18, blocked:1, top_status:"202", waf_reason:"bot_mgmt|challenge", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
+    {ip:"198.51.100.88", requests:16, blocked:1, top_status:"200", waf_reason:"bot_mgmt|challenge", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"203.0.113.146", requests:14, blocked:0, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)"},
+    {ip:"198.51.100.47", requests:12, blocked:0, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"203.0.113.36", requests:12, blocked:0, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
+    {ip:"192.0.2.202", requests:10, blocked:10, top_status:"403", waf_reason:"waf_deny|custom_rule_match", hosts:1, ua_sample:"Mozilla/5.0 (compatible; SecurityResearch/1.0)"},
+    {ip:"198.51.100.208", requests:9, blocked:0, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"203.0.113.143", requests:9, blocked:0, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
+    {ip:"192.0.2.96", requests:9, blocked:0, top_status:"307", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:85.0) Firefox/85.0"}
+  ],
+  rawCounts: {
+    "Status 200": 224, "Status 202": 66, "Status 301": 36, "Status 302": 19,
+    "Status 307": 106, "Status 400": 1, "Status 403": 103, "Status 429": 3, "Status 483": 1,
+    "Method GET": 342, "Method POST": 217,
+    "Security: env/config file scan attempts": 15,
+    "Security: encoded path-traversal attempts": 2,
+    "Security: SQLi / XSS probes detected": 0,
+    "Origin upstream: origin-pool-1.internal.example": 225,
+    "Origin upstream: primary-origin.example.com": 134,
+    "Origin upstream: 127.0.0.1 (edge-local)": 82
+  }
+};
+
+/* ---------- Parsing engine (Akamai edge/WAF delivery log) ---------- */
+/* Record type 'r' (client-facing, >=91 space-delimited fields):
+     [2]=epoch ts  [3]=edge time proxy(ms)  [10]=client ip  [11]=method
+     [12]=uri  [13]=status  [14]=waf/error reason  [17]=host  [20]=user-agent (url-encoded)
+   Record type 'f' (origin/forward leg, 63-90 fields):
+     [14]=status  [23]=upstream host                                            */
+
+function pct(sortedArr, p) {
+  if (!sortedArr.length) return 0;
+  const k = (sortedArr.length - 1) * p;
+  const lo = Math.floor(k), hi = Math.min(lo + 1, sortedArr.length - 1);
+  if (lo === hi) return sortedArr[lo];
+  return sortedArr[lo] + (sortedArr[hi] - sortedArr[lo]) * (k - lo);
+}
+function fnum(v, d = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
+function bucketOf(status) {
+  const n = parseInt(status, 10);
+  if (!Number.isFinite(n)) return 'other';
+  if (n >= 200 && n < 300) return '2xx';
+  if (n >= 300 && n < 400) return '3xx';
+  if (n >= 400 && n < 500) return '4xx';
+  if (n >= 500 && n < 600) return '5xx';
+  return 'other';
+}
+function normalizeUri(uri) {
+  const pathOnly = uri.split('?')[0];
+  return pathOnly.split('/').map(p => {
+    if (/^\d+\.?$/.test(p)) return '{id}';
+    if (p.length >= 12 && /^[A-Za-z0-9_-]+$/.test(p)) return '{token}';
+    return p;
+  }).join('/');
+}
+function safeDecode(s) {
+  try { return decodeURIComponent(s); } catch (e) { return s.replace(/%20/g, ' '); }
+}
+function topCounterEntry(counter) {
+  let best = null;
+  for (const [k, v] of counter.entries()) if (!best || v > best[1]) best = [k, v];
+  return best;
+}
+
+function parseLogText(text) {
+  const lines = text.split('\n').map(l => l.replace(/\r$/, '')).filter(l => l.trim().length);
+  const rLines = [], fLines = [];
+  for (const l of lines) {
+    const f = l.split(' ');
+    if (f.length >= 91 && f[1] === 'r') rLines.push(f);
+    else if (f.length >= 63 && f.length < 91 && f[1] === 'f') fLines.push(f);
+  }
+  return { lines, rLines, fLines };
+}
+
+function analyze(rLines, fLines) {
+  const ts = rLines.map(f => fnum(f[2])).sort((a, b) => a - b);
+  const t0 = ts[0], t1 = ts[ts.length - 1];
+  const duration = Math.max(t1 - t0, 0.001);
+
+  // latency
+  const lat = rLines.map(f => fnum(f[3])).sort((a, b) => a - b);
+  const latency = {
+    avg: lat.reduce((a, b) => a + b, 0) / (lat.length || 1),
+    p50: pct(lat, 0.5), p90: pct(lat, 0.9), p95: pct(lat, 0.95), p99: pct(lat, 0.99),
+    max: lat.length ? lat[lat.length - 1] : 0
+  };
+
+  // status
+  const statusCounts = new Map();
+  const statusBuckets = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, other: 0 };
+  const methodCounts = new Map();
+  for (const f of rLines) {
+    statusCounts.set(f[13], (statusCounts.get(f[13]) || 0) + 1);
+    statusBuckets[bucketOf(f[13])]++;
+    methodCounts.set(f[11], (methodCounts.get(f[11]) || 0) + 1);
+  }
+
+  // timeline bins
+  const NBINS = 30;
+  const binWidth = duration / NBINS;
+  const binCounts = new Array(NBINS).fill(0);
+  const binLat = Array.from({ length: NBINS }, () => []);
+  for (const f of rLines) {
+    const t = fnum(f[2]);
+    let idx = Math.min(Math.floor((t - t0) / binWidth), NBINS - 1);
+    if (idx < 0) idx = 0;
+    binCounts[idx]++;
+    binLat[idx].push(fnum(f[3]));
+  }
+  const binRps = binCounts.map(c => +(c / binWidth).toFixed(4));
+  const binP95 = binLat.map(arr => arr.length ? +pct(arr.slice().sort((a, b) => a - b), 0.95).toFixed(1) : 0);
+  const binLabels = [];
+  for (let i = 0; i < NBINS; i++) {
+    const tmid = (t0 + i * binWidth) * 1000;
+    const d = new Date(tmid);
+    binLabels.push(d.toISOString().slice(11, 16));
+  }
+
+  // peak rps (max count in any 60s window)
+  let peakCount = 0, left = 0;
+  for (let right = 0; right < ts.length; right++) {
+    while (ts[right] - ts[left] > 60) left++;
+    peakCount = Math.max(peakCount, right - left + 1);
+  }
+  const peakRps = peakCount / 60;
+
+  // normalized endpoint grouping
+  const latByNorm = new Map();
+  const failByNorm = new Map();
+  for (const f of rLines) {
+    const n = normalizeUri(f[12]);
+    if (!latByNorm.has(n)) latByNorm.set(n, []);
+    latByNorm.get(n).push(fnum(f[3]));
+    const b = bucketOf(f[13]);
+    if (b === '4xx' || b === '5xx') failByNorm.set(n, (failByNorm.get(n) || 0) + 1);
+  }
+  const slowest = [];
+  for (const [n, arr] of latByNorm.entries()) {
+    if (arr.length >= 2) {
+      const sorted = arr.slice().sort((a, b) => a - b);
+      slowest.push({ endpoint: n, p95: +pct(sorted, 0.95).toFixed(1), count: arr.length, avg: +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) });
+    }
+  }
+  slowest.sort((a, b) => b.p95 - a.p95);
+  const topSlow = slowest.slice(0, 10);
+  const topFail = [...failByNorm.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([endpoint, count]) => ({ endpoint, count }));
+
+  // IP detail
+  const ipDetail = new Map();
+  for (const f of rLines) {
+    const ip = f[10];
+    if (!ipDetail.has(ip)) ipDetail.set(ip, { count: 0, statuses: new Map(), reasons: new Map(), uas: new Set(), hosts: new Set() });
+    const d = ipDetail.get(ip);
+    d.count++;
+    d.statuses.set(f[13], (d.statuses.get(f[13]) || 0) + 1);
+    d.reasons.set(f[14], (d.reasons.get(f[14]) || 0) + 1);
+    d.uas.add(safeDecode(f[20]).slice(0, 90));
+    d.hosts.add(f[17]);
+  }
+  const ipTable = [...ipDetail.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 12)
+    .map(([ip, d]) => {
+      const blocked = (d.statuses.get('403') || 0) + (d.statuses.get('429') || 0);
+      const topStatus = topCounterEntry(d.statuses)[0];
+      const reasonsSorted = [...d.reasons.entries()].sort((a, b) => b[1] - a[1]);
+      let wafReason = reasonsSorted[0][0];
+      if (wafReason === '-' && reasonsSorted.length > 1) wafReason = reasonsSorted[1][0];
+      return { ip, requests: d.count, blocked, top_status: topStatus, waf_reason: wafReason, hosts: d.hosts.size, ua_sample: [...d.uas][0] || '-' };
+    });
+
+  // security pattern hits
+  const secPatterns = {
+    'Path traversal': /\.\.\/|%2e%2e/i,
+    'SQLi probe': /union(%20|\s)+select|select.+from|'--|%27--|or%201=1/i,
+    'XSS probe': /<script|%3cscript|onerror=/i,
+    'Env/config file scan': /\.env|\.git\/config|next\.config\.js|app-paths-manifest/i
+  };
+  const secHits = {};
+  for (const name in secPatterns) secHits[name] = 0;
+  for (const f of rLines) for (const name in secPatterns) if (secPatterns[name].test(f[12])) secHits[name]++;
+
+  // hosts, forward legs
+  const hostCounts = new Map();
+  for (const f of rLines) hostCounts.set(f[17], (hostCounts.get(f[17]) || 0) + 1);
+  const fStatusCounts = new Map(), fUpstream = new Map();
+  for (const f of fLines) {
+    fStatusCounts.set(f[14], (fStatusCounts.get(f[14]) || 0) + 1);
+    fUpstream.set(f[23], (fUpstream.get(f[23]) || 0) + 1);
+  }
+
+  const total = rLines.length;
+  const count404 = statusCounts.get('404') || 0;
+  const count5xx = statusBuckets['5xx'];
+  const blocked403 = statusCounts.get('403') || 0;
+  const blocked429 = statusCounts.get('429') || 0;
+  const blockedTotal = blocked403 + blocked429;
+
+  let badge = 'NORMAL';
+  if (total > 0 && count5xx / total > 0.01) badge = 'CRITICAL';
+  else if (count5xx > 0 || (total > 0 && blockedTotal / total > 0.05)) badge = 'WARN';
+
+  const rawCounts = {};
+  for (const [k, v] of [...statusCounts.entries()].sort()) rawCounts[`Status ${k}`] = v;
+  for (const [k, v] of methodCounts.entries()) rawCounts[`Method ${k}`] = v;
+  rawCounts['Security: env/config file scan attempts'] = secHits['Env/config file scan'];
+  rawCounts['Security: encoded path-traversal attempts'] = secHits['Path traversal'];
+  rawCounts['Security: SQLi probes detected'] = secHits['SQLi probe'];
+  rawCounts['Security: XSS probes detected'] = secHits['XSS probe'];
+  for (const [k, v] of [...fUpstream.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)) rawCounts[`Origin upstream: ${k}`] = v;
+
+  const startStr = new Date(t0 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  const endStr = new Date(t1 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  const durHrs = (duration / 3600).toFixed(1);
+
+  return {
+    meta: {
+      title: `Edge Log Analysis — Uploaded Data`,
+      subtitle: `Observed window: ${startStr} → ${endStr} UTC (≈${durHrs}h) · ${total} client-facing requests · ${fLines.length} origin/forward legs`,
+      statusBadge: badge
+    },
+    kpis: {
+      total, totalSub: `+${fLines.length} origin-leg records`,
+      rate404: total ? (count404 / total * 100).toFixed(1) + '%' : '0.0%',
+      rate404Sub: `${count404} of ${total}`, good404: count404 === 0,
+      count5xx, count5xxSub: count5xx === 0 ? 'no server errors observed' : `${(count5xx / total * 100).toFixed(1)}% of requests`, good5xx: count5xx === 0,
+      p95: Math.round(latency.p95) + 'ms',
+      p95Sub: `p50 ${Math.round(latency.p50)}ms · p99 ${Math.round(latency.p99)}ms · max ${Math.round(latency.max)}ms`,
+      peakRps: peakRps.toFixed(2),
+      blocks: blockedTotal,
+      blocksSub: `${blocked403}×403 + ${blocked429}×429 (${total ? (blockedTotal / total * 100).toFixed(1) : '0.0'}%)`
+    },
+    timeline: { labels: binLabels, rps: binRps, p95: binP95 },
+    statusBuckets: { '2xx': statusBuckets['2xx'], '3xx': statusBuckets['3xx'], '4xx': statusBuckets['4xx'], '5xx': statusBuckets['5xx'] },
+    statusHint: `${total} client-facing requests`,
+    failHint: count404 === 0 && count5xx === 0
+      ? '404 + 5xx = 0 in this dataset — shown instead: 4xx (client-error / blocked) by normalized endpoint'
+      : 'Top endpoints by combined 404 + 5xx count',
+    topFail,
+    topSlow,
+    ipTable,
+    rawCounts
+  };
+}
+
+/* ---------- Chart + DOM rendering ---------- */
+const css = getComputedStyle(document.documentElement);
+const colorVar = (name) => css.getPropertyValue(name).trim();
+Chart.defaults.font.family = "system-ui, -apple-system, 'Segoe UI', sans-serif";
+Chart.defaults.color = colorVar('--text-secondary');
+Chart.defaults.borderColor = colorVar('--gridline');
+const gridOpt = { color: colorVar('--gridline'), drawTicks: false };
+const tickColor = colorVar('--text-muted');
+
+let currentIpTable = [];
+let sortKey = 'requests', sortDir = -1;
+
+const rpsChart = new Chart(document.getElementById('rpsChart'), {
+  type: 'line',
+  data: { labels: [], datasets: [{ label: 'Requests / sec', data: [], borderColor: colorVar('--series-1'), backgroundColor: colorVar('--series-1'), borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.25, fill: false }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+    scales: { x: { grid: { display: false }, ticks: { color: tickColor, maxTicksLimit: 8 } }, y: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor } } } }
+});
+const latChart = new Chart(document.getElementById('latChart'), {
+  type: 'line',
+  data: { labels: [], datasets: [{ label: 'p95 latency (ms)', data: [], borderColor: colorVar('--series-2'), backgroundColor: colorVar('--series-2'), borderWidth: 2, pointRadius: 2, pointHoverRadius: 5, tension: 0.25, fill: false }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+    scales: { x: { grid: { display: false }, ticks: { color: tickColor, maxTicksLimit: 8 } }, y: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor } } } }
+});
+const statusChart = new Chart(document.getElementById('statusChart'), {
+  type: 'doughnut',
+  data: { labels: ['2xx Success', '3xx Redirect', '4xx Client Error', '5xx Server Error'], datasets: [{ data: [], backgroundColor: [colorVar('--good'), colorVar('--series-1'), colorVar('--serious'), colorVar('--critical')], borderColor: colorVar('--surface-1'), borderWidth: 2 }] },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: colorVar('--text-secondary'), boxWidth: 10, padding: 14 } },
+      tooltip: { callbacks: { label: (ctx) => { const total = ctx.dataset.data.reduce((a, b) => a + b, 0) || 1; const p = ((ctx.parsed / total) * 100).toFixed(1); return `${ctx.label}: ${ctx.parsed} (${p}%)`; } } } } }
+});
+const failChart = new Chart(document.getElementById('failChart'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ label: '4xx/5xx count', data: [], backgroundColor: colorVar('--serious'), borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, borderSkipped: false, maxBarThickness: 40 }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+    scales: { x: { grid: { display: false }, ticks: { color: tickColor, autoSkip: false, maxRotation: 20 } }, y: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, precision: 0 } } } }
+});
+const slowChart = new Chart(document.getElementById('slowChart'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ label: 'p95 latency (ms)', data: [], backgroundColor: colorVar('--series-1'), borderRadius: { topLeft: 0, topRight: 4, bottomLeft: 0, bottomRight: 4 }, borderSkipped: false }] },
+  options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+    scales: { x: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor } }, y: { grid: { display: false }, ticks: { color: tickColor } } } }
+});
+
+function statusPillClass(s) {
+  const n = parseInt(s, 10);
+  if (n >= 200 && n < 300) return 'pill s2';
+  if (n >= 300 && n < 400) return 'pill s3';
+  return 'pill s4';
+}
+function renderTable() {
+  const filter = document.getElementById('ipFilter').value.toLowerCase();
+  const rows = currentIpTable
+    .filter(r => Object.values(r).join(' ').toLowerCase().includes(filter))
+    .sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : -1) * sortDir);
+  document.querySelector('#ipTable tbody').innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.ip}</td>
+      <td>${r.requests}</td>
+      <td>${r.blocked}</td>
+      <td><span class="${statusPillClass(r.top_status)}">${r.top_status}</span></td>
+      <td>${r.waf_reason}</td>
+      <td>${r.hosts}</td>
+      <td style="color:var(--text-muted); font-size:12px;">${r.ua_sample}</td>
+    </tr>
+  `).join('');
+}
+document.querySelectorAll('#ipTable th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    sortDir = (sortKey === key) ? -sortDir : -1;
+    sortKey = key;
+    renderTable();
+  });
+});
+document.getElementById('ipFilter').addEventListener('input', renderTable);
+
+function renderAll(d) {
+  document.getElementById('pageTitle').childNodes[0].nodeValue = `Edge Log Analysis — ${d.meta.title.replace('Edge Log Analysis — ', '')} `;
+  document.getElementById('pageSubtitle').textContent = d.meta.subtitle;
+  const badgeEl = document.getElementById('statusBadge');
+  badgeEl.textContent = d.meta.statusBadge;
+  badgeEl.className = 'badge ' + d.meta.statusBadge;
+
+  document.getElementById('kpiTotal').textContent = d.kpis.total;
+  document.getElementById('kpiTotalSub').textContent = d.kpis.totalSub;
+  document.getElementById('kpi404').textContent = d.kpis.rate404;
+  document.getElementById('kpi404Sub').textContent = d.kpis.rate404Sub;
+  document.getElementById('kpi404Card').className = 'card kpi ' + (d.kpis.good404 ? 'good' : 'warn');
+  document.getElementById('kpi5xx').textContent = d.kpis.count5xx;
+  document.getElementById('kpi5xxSub').textContent = d.kpis.count5xxSub;
+  document.getElementById('kpi5xxCard').className = 'card kpi ' + (d.kpis.good5xx ? 'good' : 'warn');
+  document.getElementById('kpiP95').textContent = d.kpis.p95;
+  document.getElementById('kpiP95Sub').textContent = d.kpis.p95Sub;
+  document.getElementById('kpiPeakRps').textContent = d.kpis.peakRps;
+  document.getElementById('kpiBlocks').textContent = d.kpis.blocks;
+  document.getElementById('kpiBlocksSub').textContent = d.kpis.blocksSub;
+
+  rpsChart.data.labels = d.timeline.labels;
+  rpsChart.data.datasets[0].data = d.timeline.rps;
+  rpsChart.update();
+  latChart.data.labels = d.timeline.labels;
+  latChart.data.datasets[0].data = d.timeline.p95;
+  latChart.update();
+
+  statusChart.data.datasets[0].data = [d.statusBuckets['2xx'], d.statusBuckets['3xx'], d.statusBuckets['4xx'], d.statusBuckets['5xx']];
+  statusChart.update();
+  document.getElementById('statusHint').textContent = d.statusHint;
+
+  failChart.data.labels = d.topFail.map(x => x.endpoint);
+  failChart.data.datasets[0].data = d.topFail.map(x => x.count);
+  failChart.update();
+  document.getElementById('failHint').textContent = d.failHint;
+
+  slowChart.data.labels = d.topSlow.map(x => `${x.endpoint} (n=${x.count})`);
+  slowChart.data.datasets[0].data = d.topSlow.map(x => x.p95);
+  slowChart.update();
+
+  currentIpTable = d.ipTable;
+  renderTable();
+
+  document.getElementById('rawTable').innerHTML = Object.entries(d.rawCounts)
+    .map(([k, v]) => `<tr><td>${k}</td><td style="font-variant-numeric:tabular-nums;">${v}</td></tr>`).join('');
+}
+
+/* ---------- Upload wiring ---------- */
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const uploadStatus = document.getElementById('uploadStatus');
+
+function setStatus(msg, cls) {
+  uploadStatus.textContent = msg;
+  uploadStatus.className = cls || '';
+}
+
+async function handleFiles(fileList) {
+  const files = [...fileList];
+  if (!files.length) return;
+  setStatus(`Reading ${files.length} file(s)…`);
+  try {
+    const texts = await Promise.all(files.map(f => f.text()));
+    const combined = texts.join('\n');
+    const { rLines, fLines } = parseLogText(combined);
+    if (rLines.length === 0) {
+      setStatus(`No recognized records found. This tool expects the Akamai edge/WAF delivery log format (space-delimited, record type 'r' or 'f' at field 2). Parsed ${files.length} file(s), 0 usable lines.`, 'error');
+      return;
+    }
+    const result = analyze(rLines, fLines);
+    renderAll(result);
+    setStatus(`Loaded ${files.map(f => f.name).join(', ')} — parsed ${rLines.length} client requests + ${fLines.length} origin legs.`, 'success');
+  } catch (err) {
+    setStatus('Failed to parse file(s): ' + err.message, 'error');
+  }
+}
+
+document.getElementById('chooseBtn').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+document.getElementById('resetBtn').addEventListener('click', () => {
+  renderAll(SAMPLE_DATA);
+  fileInput.value = '';
+  setStatus('Showing sample data.');
+});
+['dragenter', 'dragover'].forEach(evt => dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); }));
+['dragleave', 'drop'].forEach(evt => dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
+dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+
+/* ---------- Initial render ---------- */
+renderAll(SAMPLE_DATA);
+</script>
+
+</body>
+</html>
