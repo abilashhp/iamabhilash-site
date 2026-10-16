@@ -238,7 +238,7 @@
     <div class="card kpi" id="kpiCacheCard">
       <div class="label">Cache Hit Ratio</div>
       <div class="value" id="kpiCacheHitRatio">0.0%</div>
-      <div class="sub" id="kpiCacheHitRatioSub">0 hit + 0 refresh-hit of 0</div>
+      <div class="sub" id="kpiCacheHitRatioSub">0 hit (d/i/m) of 0</div>
     </div>
     <div class="card kpi">
       <div class="label">Total Bytes Served</div>
@@ -273,7 +273,7 @@
     </div>
     <div class="card">
       <h2>Cache Status Breakdown</h2>
-      <p class="hint" id="cacheHint">Object status information (field 16), top raw values</p>
+      <p class="hint" id="cacheHint">Object status information (field 16) — each bar is a combination of cumulative single-letter flags; hover a bar to decode it</p>
       <div class="chart-box"><canvas id="cacheChart"></canvas></div>
     </div>
   </div>
@@ -417,13 +417,13 @@ const SAMPLE_DATA = {
     p95:  [127.0,113.2,167.0,0.0,180.4,47.8,191.8,85.8,211.4,228.4,140.5,23.5,193.9,89.8,66.6,15.3,136.0,178.8,41.4,0.0,56.8,177.2,210.0,52.0,99.6,160.0,70.0,0.0,0.0,160.8]
   },
   cache: {
-    hitRatio: "64.2%", hitRatioSub: "341 hit + 18 refresh-hit of 559", good: true,
+    hitRatio: "64.2%", hitRatioSub: "359 hit (d/i/m) of 559 · 142 origin fetch · 33 revalidated", good: true,
     breakdown: [
-      {label: "TCP_HIT", count: 298},
-      {label: "TCP_MISS", count: 142},
-      {label: "TCP_REFRESH_HIT", count: 43},
-      {label: "TCP_IMS_HIT", count: 31},
-      {label: "TCP_MEM_HIT", count: 20},
+      {label: "d", count: 231},
+      {label: "o", count: 142},
+      {label: "m", count: 67},
+      {label: "sA", count: 33},
+      {label: "i", count: 61},
       {label: "-", count: 25}
     ]
   },
@@ -551,17 +551,86 @@ function humanBytes(n) {
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
   return (i > 0 && v < 10 ? v.toFixed(1) : Math.round(v)) + ' ' + units[i];
 }
-// Akamai's Object status information / Object Status field has no fixed
-// published vocabulary, so classify by substring rather than exact match —
-// this degrades gracefully (falls into "other"/"unknown") on log configs
-// that use different cache-status tokens.
+// Object status information (r-line field 16) is NOT a cache-status string
+// like "TCP_HIT" — per the Ghost log format spec it's a cumulative set of
+// single-letter flags (any subset of a-z/A-Z can appear together, e.g.
+// "doA"). Each letter has its own independent, documented meaning.
+const R_OBJECT_STATUS_1_CHARS = {
+  d: "Object fetched from disk (cache hit)",
+  i: "Object found in file system buffer cache (cache hit)",
+  m: "Whole object was in Ghost's memory cache (cache hit)",
+  n: "Object was negatively cached (e.g. a cached 404)",
+  s: "Object was stale — needed validation",
+  g: "Another Ghost (ICP/RDC peer) was contacted",
+  p: "Another Ghost (hierarchy parent) was contacted",
+  o: "The origin server was contacted",
+  A: "Object was asynchronously refreshed",
+  S: "Object was synchronously refreshed",
+  a: "Response was sent through the ESI processor",
+  b: "Typecode 3 request with a bad fingerprint",
+  f: "Response was for an ESI fragment",
+  u: "This Ghost ungzipped the object at some point",
+  z: "Response was served Content-Encoding: gzip",
+  G: "Served to a Ghost peer in the region (or tunneled EdgeComputing request)",
+  P: "Response was served to a cache hierarchy child",
+  D: "A default object was served",
+  x: "'no-store' set by metadata (not overridden by response)",
+  r: "An ESI parse tree cache was hit",
+  t: "Request was a SureRoute test object",
+  X: "Request served to a SureRoute child",
+  k: "'bypass_cache' turned on by metadata (or probabilistic ICP/RDC)",
+  l: "'bypass_cache' turned on via Cache-Control response header",
+  L: "Bypass-cache turned off in the response header",
+  y: "'no-store' turned on in the response header",
+  Z: "Some Ghost zipped the object at some point in handling",
+  e: "Ghost served the last byte of the object to the client",
+  c: "new-cachekey feature was enabled and object copied with new nonce",
+  C: "SureRoute billing-code C",
+  R: "SureRoute billing-code R",
+  U: "SureRoute billing-code U",
+  T: "SureRoute billing-code T",
+  j: "Client didn't need to wait for Ghost to download any part of the response",
+  O: "A cache-key collision occurred during the request",
+  Q: "HTTP CONNECT method was used",
+  h: "URL-based distributed authentication failed for the incoming URL",
+  q: "Cached DCA output was served",
+  H: "A fail-action/fail-action2 was executed, or Request Queuing reply-arl served",
+  V: "Object TTL was set in metadata",
+  W: "Object TTL was set in response headers",
+  I: "Digital Rights Manager was used for this request (streaming Ghost)",
+  Y: "OCSP client certificate validation was used",
+  F: "Request triggered prefetching of embedded objects",
+  K: "Request was for a prefetched object",
+  v: "Request was for a non-cacheable prefetched object",
+  E: "An HSAF peer was contacted, or this is an HSAF peer",
+  B: "Another Ghost started a hashed-serial-and-forward request (not an HSAF peer)",
+  N: "Request processed over an anycast VIP, marked zero-rated billing",
+  M: "Request arrived as, or went forward as, a metrocache request",
+  J: "Request has site-shield policy on its path to origin",
+  w: "EdgeWorkers was called",
+};
+function decodeObjectStatus1(raw) {
+  if (!raw || raw === '-') return ['No status flags (not applicable, or bypassed caching entirely)'];
+  const out = [];
+  for (const ch of raw) {
+    out.push(R_OBJECT_STATUS_1_CHARS[ch] ? `${ch}: ${R_OBJECT_STATUS_1_CHARS[ch]}` : `${ch}: (undocumented flag)`);
+  }
+  return out;
+}
+// Cache hit ratio uses the documented semantics directly: d/i/m mean the
+// object was already in this Ghost's own cache (disk/buffer/memory) — a hit
+// even if 'o' is also present (origin was contacted only to revalidate a
+// stale copy, e.g. a 304). Plain 'o' with no d/i/m means a full fetch from
+// origin (miss). 'g'/'p' mean another Ghost was used instead of origin.
+// 'n' is a negatively-cached (e.g. 404) response. Buckets are evaluated in
+// this priority order since multiple flags can legitimately co-occur.
 function classifyCacheStatus(raw) {
   if (!raw || raw === '-') return 'unknown';
-  const s = raw.toLowerCase();
-  if (/refresh.*hit|revalidat/.test(s)) return 'refresh_hit';
-  if (/hit/.test(s)) return 'hit';
-  if (/miss/.test(s)) return 'miss';
-  if (/pass|bypass|no.?cache|denied/.test(s)) return 'pass';
+  if (raw.includes('d') || raw.includes('i') || raw.includes('m')) return 'hit';
+  if (raw.includes('o')) return 'miss';
+  if (raw.includes('n')) return 'negative';
+  if (raw.includes('g') || raw.includes('p')) return 'peer';
+  if (raw.includes('s')) return 'revalidated';
   return 'other';
 }
 
@@ -595,7 +664,7 @@ function analyze(rLines, fLines) {
   const methodCounts = new Map();
   // cache status (field 16), content-type (field 17), WAF info (field 62)
   const cacheCounts = new Map();
-  const cacheBuckets = { hit: 0, refresh_hit: 0, miss: 0, pass: 0, other: 0, unknown: 0 };
+  const cacheBuckets = { hit: 0, miss: 0, negative: 0, peer: 0, revalidated: 0, other: 0, unknown: 0 };
   const ctCounts = new Map();
   const wafTokenCounts = new Map();
   let wafHitRequests = 0;
@@ -730,12 +799,11 @@ function analyze(rLines, fLines) {
   if (total > 0 && count5xx / total > 0.01) badge = 'CRITICAL';
   else if (count5xx > 0 || (total > 0 && blockedTotal / total > 0.05)) badge = 'WARN';
 
-  // cache hit ratio
-  const cacheHits = cacheBuckets.hit + cacheBuckets.refresh_hit;
-  const cacheHitPct = total ? (cacheHits / total * 100) : 0;
+  // cache hit ratio — see classifyCacheStatus() for how d/i/m/o/s/g/p/n map to these buckets
+  const cacheHitPct = total ? (cacheBuckets.hit / total * 100) : 0;
   const cache = {
     hitRatio: cacheHitPct.toFixed(1) + '%',
-    hitRatioSub: `${cacheBuckets.hit} hit + ${cacheBuckets.refresh_hit} refresh-hit of ${total}`,
+    hitRatioSub: `${cacheBuckets.hit} hit (d/i/m) of ${total} · ${cacheBuckets.miss} origin fetch · ${cacheBuckets.revalidated} revalidated`,
     good: cacheHitPct >= 60,
     breakdown: topNEntries(cacheCounts, 6).map(([label, count]) => ({ label, count }))
   };
@@ -866,7 +934,9 @@ const CATEGORICAL_PALETTE = [
 const cacheChart = new Chart(document.getElementById('cacheChart'), {
   type: 'bar',
   data: { labels: [], datasets: [{ label: 'Requests', data: [], backgroundColor: CATEGORICAL_PALETTE, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, borderSkipped: false, maxBarThickness: 40 }] },
-  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false },
+      tooltip: { callbacks: { afterLabel: (ctx) => decodeObjectStatus1(ctx.label) } } },
     scales: { x: { grid: { display: false }, ticks: { color: tickColor, autoSkip: false, maxRotation: 20 } }, y: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, precision: 0 } } } }
 });
 const contentTypeChart = new Chart(document.getElementById('contentTypeChart'), {
