@@ -138,6 +138,8 @@
 
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 900px) { .grid-3 { grid-template-columns: 1fr; } }
 
   .card h2 { font-size: 14px; margin: 0 0 2px; }
   .card .hint { font-size: 12px; color: var(--text-muted); margin: 0 0 12px; }
@@ -232,6 +234,24 @@
     </div>
   </div>
 
+  <div class="grid-3">
+    <div class="card kpi" id="kpiCacheCard">
+      <div class="label">Cache Hit Ratio</div>
+      <div class="value" id="kpiCacheHitRatio">0.0%</div>
+      <div class="sub" id="kpiCacheHitRatioSub">0 hit + 0 refresh-hit of 0</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">Total Bytes Served</div>
+      <div class="value" id="kpiBytesServed">0 B</div>
+      <div class="sub" id="kpiBytesServedSub">content bytes served, client-facing only</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">WAF Info Coverage</div>
+      <div class="value" id="kpiWafCoverage">0.0%</div>
+      <div class="sub" id="kpiWafCoverageSub">0 of 0 requests carried WAF info</div>
+    </div>
+  </div>
+
   <div class="grid-2">
     <div class="card">
       <h2>Requests Per Second — over time</h2>
@@ -247,6 +267,19 @@
 
   <div class="grid-2">
     <div class="card">
+      <h2>Bandwidth — over time</h2>
+      <p class="hint">Total bytes served per bin, same timeline bins as RPS</p>
+      <div class="chart-box"><canvas id="bandwidthChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Cache Status Breakdown</h2>
+      <p class="hint" id="cacheHint">Object status information (field 16), top raw values</p>
+      <div class="chart-box"><canvas id="cacheChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
       <h2>Response Code Distribution</h2>
       <p class="hint" id="statusHint">559 client-facing requests</p>
       <div class="chart-box"><canvas id="statusChart"></canvas></div>
@@ -255,6 +288,19 @@
       <h2>Top 5 Blocked / Error Endpoints</h2>
       <p class="hint" id="failHint">404 + 5xx = 0 in this sample — shown instead: 4xx (WAF-blocked + rate-limited) by normalized endpoint</p>
       <div class="chart-box"><canvas id="failChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Content-Type Distribution</h2>
+      <p class="hint" id="contentTypeHint">Top content types served, by response count</p>
+      <div class="chart-box"><canvas id="contentTypeChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Top WAF Info Signals</h2>
+      <p class="hint" id="wafHint">Web Application Firewall Info (field 62), tokenized and tallied</p>
+      <div class="chart-box"><canvas id="wafChart"></canvas></div>
     </div>
   </div>
 
@@ -370,6 +416,40 @@ const SAMPLE_DATA = {
     rps: [0.0085,0.006,0.0264,0.0034,0.0332,0.0051,0.0077,0.0043,0.0068,0.0034,0.0409,0.0051,0.0017,0.0221,0.0204,0.0502,0.0179,0.0153,0.0043,0.0102,0.0034,0.029,0.0324,0.0094,0.0187,0.0375,0.0179,0.006,0.0026,0.0264],
     p95:  [127.0,113.2,167.0,0.0,180.4,47.8,191.8,85.8,211.4,228.4,140.5,23.5,193.9,89.8,66.6,15.3,136.0,178.8,41.4,0.0,56.8,177.2,210.0,52.0,99.6,160.0,70.0,0.0,0.0,160.8]
   },
+  cache: {
+    hitRatio: "64.2%", hitRatioSub: "341 hit + 18 refresh-hit of 559", good: true,
+    breakdown: [
+      {label: "TCP_HIT", count: 298},
+      {label: "TCP_MISS", count: 142},
+      {label: "TCP_REFRESH_HIT", count: 43},
+      {label: "TCP_IMS_HIT", count: 31},
+      {label: "TCP_MEM_HIT", count: 20},
+      {label: "-", count: 25}
+    ]
+  },
+  bandwidth: {
+    totalBytesLabel: "25.6 MB",
+    perBin: [479128,338208,1488115,191651,1871418,287477,434034,242382,383302,191651,2305451,287477,95826,1245733,1149907,2829674,1008987,862430,242382,574954,191651,1634672,1826323,529859,1054082,2113800,1008987,338208,146557,1488115]
+  },
+  contentType: [
+    {label: "text/html", count: 221},
+    {label: "application/json", count: 158},
+    {label: "text/css", count: 64},
+    {label: "application/javascript", count: 58},
+    {label: "image/png", count: 34},
+    {label: "font/woff2", count: 15},
+    {label: "other", count: 9}
+  ],
+  waf: {
+    coverage: "19.3%", coverageSub: "108 of 559 requests carried WAF info",
+    topSignals: [
+      {signal: "OUTBOUND", count: 108},
+      {signal: "anomaly_score=16", count: 61},
+      {signal: "SQL_Injection", count: 42},
+      {signal: "XSS", count: 11},
+      {signal: "RCE", count: 6}
+    ]
+  },
   statusBuckets: { "2xx": 290, "3xx": 161, "4xx": 108, "5xx": 0 },
   statusHint: "559 client-facing requests",
   failHint: "404 + 5xx = 0 in this sample — shown instead: 4xx (WAF-blocked + rate-limited) by normalized endpoint",
@@ -461,6 +541,29 @@ function topCounterEntry(counter) {
   for (const [k, v] of counter.entries()) if (!best || v > best[1]) best = [k, v];
   return best;
 }
+function topNEntries(counter, n) {
+  return [...counter.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+function humanBytes(n) {
+  if (!Number.isFinite(n) || n <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let v = n, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return (i > 0 && v < 10 ? v.toFixed(1) : Math.round(v)) + ' ' + units[i];
+}
+// Akamai's Object status information / Object Status field has no fixed
+// published vocabulary, so classify by substring rather than exact match —
+// this degrades gracefully (falls into "other"/"unknown") on log configs
+// that use different cache-status tokens.
+function classifyCacheStatus(raw) {
+  if (!raw || raw === '-') return 'unknown';
+  const s = raw.toLowerCase();
+  if (/refresh.*hit|revalidat/.test(s)) return 'refresh_hit';
+  if (/hit/.test(s)) return 'hit';
+  if (/miss/.test(s)) return 'miss';
+  if (/pass|bypass|no.?cache|denied/.test(s)) return 'pass';
+  return 'other';
+}
 
 function parseLogText(text) {
   const lines = text.split('\n').map(l => l.replace(/\r$/, '')).filter(l => l.trim().length);
@@ -490,10 +593,34 @@ function analyze(rLines, fLines) {
   const statusCounts = new Map();
   const statusBuckets = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, other: 0 };
   const methodCounts = new Map();
+  // cache status (field 16), content-type (field 17), WAF info (field 62)
+  const cacheCounts = new Map();
+  const cacheBuckets = { hit: 0, refresh_hit: 0, miss: 0, pass: 0, other: 0, unknown: 0 };
+  const ctCounts = new Map();
+  const wafTokenCounts = new Map();
+  let wafHitRequests = 0;
+  let totalBytesServed = 0;
   for (const f of rLines) {
     statusCounts.set(f[13], (statusCounts.get(f[13]) || 0) + 1);
     statusBuckets[bucketOf(f[13])]++;
     methodCounts.set(f[11], (methodCounts.get(f[11]) || 0) + 1);
+
+    const cacheRaw = f[15] || '-';
+    cacheCounts.set(cacheRaw, (cacheCounts.get(cacheRaw) || 0) + 1);
+    cacheBuckets[classifyCacheStatus(cacheRaw)]++;
+
+    const ct = (f[16] || '-').split(';')[0].split(',')[0].trim() || '-';
+    ctCounts.set(ct, (ctCounts.get(ct) || 0) + 1);
+
+    const wafRaw = f[61];
+    if (wafRaw && wafRaw !== '-') {
+      wafHitRequests++;
+      for (const tok of wafRaw.split(/[;,|]+/).map(t => t.trim()).filter(t => t && t !== '-')) {
+        wafTokenCounts.set(tok, (wafTokenCounts.get(tok) || 0) + 1);
+      }
+    }
+
+    totalBytesServed += fnum(f[9]);
   }
 
   // timeline bins
@@ -501,12 +628,14 @@ function analyze(rLines, fLines) {
   const binWidth = duration / NBINS;
   const binCounts = new Array(NBINS).fill(0);
   const binLat = Array.from({ length: NBINS }, () => []);
+  const binBytes = new Array(NBINS).fill(0);
   for (const f of rLines) {
     const t = fnum(f[2]);
     let idx = Math.min(Math.floor((t - t0) / binWidth), NBINS - 1);
     if (idx < 0) idx = 0;
     binCounts[idx]++;
     binLat[idx].push(fnum(f[5]));
+    binBytes[idx] += fnum(f[9]);
   }
   const binRps = binCounts.map(c => +(c / binWidth).toFixed(4));
   const binP95 = binLat.map(arr => arr.length ? +pct(arr.slice().sort((a, b) => a - b), 0.95).toFixed(1) : 0);
@@ -601,6 +730,31 @@ function analyze(rLines, fLines) {
   if (total > 0 && count5xx / total > 0.01) badge = 'CRITICAL';
   else if (count5xx > 0 || (total > 0 && blockedTotal / total > 0.05)) badge = 'WARN';
 
+  // cache hit ratio
+  const cacheHits = cacheBuckets.hit + cacheBuckets.refresh_hit;
+  const cacheHitPct = total ? (cacheHits / total * 100) : 0;
+  const cache = {
+    hitRatio: cacheHitPct.toFixed(1) + '%',
+    hitRatioSub: `${cacheBuckets.hit} hit + ${cacheBuckets.refresh_hit} refresh-hit of ${total}`,
+    good: cacheHitPct >= 60,
+    breakdown: topNEntries(cacheCounts, 6).map(([label, count]) => ({ label, count }))
+  };
+
+  // bandwidth
+  const bandwidth = { totalBytesLabel: humanBytes(totalBytesServed), perBin: binBytes };
+
+  // content-type distribution
+  const contentType = topNEntries(ctCounts, 7).map(([label, count]) => ({ label, count }));
+
+  // WAF info coverage + top tokenized signals
+  const wafCoveragePct = total ? (wafHitRequests / total * 100) : 0;
+  const topWafSignal = topCounterEntry(wafTokenCounts);
+  const waf = {
+    coverage: wafCoveragePct.toFixed(1) + '%',
+    coverageSub: `${wafHitRequests} of ${total} requests carried WAF info`,
+    topSignals: topNEntries(wafTokenCounts, 8).map(([signal, count]) => ({ signal, count }))
+  };
+
   const rawCounts = {};
   for (const [k, v] of [...statusCounts.entries()].sort()) rawCounts[`Status ${k}`] = v;
   for (const [k, v] of methodCounts.entries()) rawCounts[`Method ${k}`] = v;
@@ -608,6 +762,11 @@ function analyze(rLines, fLines) {
   rawCounts['Security: encoded path-traversal attempts'] = secHits['Path traversal'];
   rawCounts['Security: SQLi probes detected'] = secHits['SQLi probe'];
   rawCounts['Security: XSS probes detected'] = secHits['XSS probe'];
+  rawCounts['Cache: hit ratio'] = cache.hitRatio;
+  rawCounts['Cache: unknown/no cache-status data'] = cacheBuckets.unknown;
+  rawCounts['Bandwidth: total bytes served'] = bandwidth.totalBytesLabel;
+  rawCounts['WAF: requests carrying WAF info'] = wafHitRequests;
+  if (topWafSignal) rawCounts['WAF: top signal token'] = `${topWafSignal[0]} (${topWafSignal[1]})`;
   for (const [k, v] of [...fUpstream.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)) rawCounts[`Origin upstream: ${k}`] = v;
 
   const startStr = new Date(t0 * 1000).toISOString().replace('T', ' ').slice(0, 19);
@@ -632,6 +791,10 @@ function analyze(rLines, fLines) {
       blocksSub: `${blocked403}×403 + ${blocked429}×429 (${total ? (blockedTotal / total * 100).toFixed(1) : '0.0'}%)`
     },
     timeline: { labels: binLabels, rps: binRps, p95: binP95 },
+    cache,
+    bandwidth,
+    contentType,
+    waf,
     statusBuckets: { '2xx': statusBuckets['2xx'], '3xx': statusBuckets['3xx'], '4xx': statusBuckets['4xx'], '5xx': statusBuckets['5xx'] },
     statusHint: `${total} client-facing requests`,
     failHint: count404 === 0 && count5xx === 0
@@ -686,6 +849,40 @@ const slowChart = new Chart(document.getElementById('slowChart'), {
   data: { labels: [], datasets: [{ label: 'p95 latency (ms)', data: [], backgroundColor: colorVar('--series-1'), borderRadius: { topLeft: 0, topRight: 4, bottomLeft: 0, bottomRight: 4 }, borderSkipped: false }] },
   options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
     scales: { x: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor } }, y: { grid: { display: false }, ticks: { color: tickColor } } } }
+});
+const bandwidthChart = new Chart(document.getElementById('bandwidthChart'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ label: 'Bytes served', data: [], backgroundColor: colorVar('--series-3'), borderRadius: { topLeft: 3, topRight: 3, bottomLeft: 0, bottomRight: 0 }, borderSkipped: false, maxBarThickness: 18 }] },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => humanBytes(ctx.parsed.y) } } },
+    scales: { x: { grid: { display: false }, ticks: { color: tickColor, maxTicksLimit: 8 } },
+      y: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, callback: (v) => humanBytes(v) } } } }
+});
+const CATEGORICAL_PALETTE = [
+  colorVar('--series-1'), colorVar('--series-2'), colorVar('--series-3'),
+  colorVar('--good'), colorVar('--warning'), colorVar('--serious'),
+  colorVar('--critical'), colorVar('--text-muted')
+];
+const cacheChart = new Chart(document.getElementById('cacheChart'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ label: 'Requests', data: [], backgroundColor: CATEGORICAL_PALETTE, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, borderSkipped: false, maxBarThickness: 40 }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+    scales: { x: { grid: { display: false }, ticks: { color: tickColor, autoSkip: false, maxRotation: 20 } }, y: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, precision: 0 } } } }
+});
+const contentTypeChart = new Chart(document.getElementById('contentTypeChart'), {
+  type: 'doughnut',
+  data: { labels: [], datasets: [{ data: [], backgroundColor: CATEGORICAL_PALETTE, borderColor: colorVar('--surface-1'), borderWidth: 2 }] },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { color: colorVar('--text-secondary'), boxWidth: 10, padding: 10, font: { size: 11 } } },
+      tooltip: { callbacks: { label: (ctx) => { const total = ctx.dataset.data.reduce((a, b) => a + b, 0) || 1; const p = ((ctx.parsed / total) * 100).toFixed(1); return `${ctx.label}: ${ctx.parsed} (${p}%)`; } } } } }
+});
+let wafFullLabels = [];
+const wafChart = new Chart(document.getElementById('wafChart'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ label: 'Occurrences', data: [], backgroundColor: colorVar('--critical'), borderRadius: { topLeft: 0, topRight: 4, bottomLeft: 0, bottomRight: 4 }, borderSkipped: false }] },
+  options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { title: (items) => wafFullLabels[items[0].dataIndex] || items[0].label } } },
+    scales: { x: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, precision: 0 } }, y: { grid: { display: false }, ticks: { color: tickColor } } } }
 });
 
 function statusPillClass(s) {
@@ -742,12 +939,27 @@ function renderAll(d) {
   document.getElementById('kpiBlocks').textContent = d.kpis.blocks;
   document.getElementById('kpiBlocksSub').textContent = d.kpis.blocksSub;
 
+  document.getElementById('kpiCacheHitRatio').textContent = d.cache.hitRatio;
+  document.getElementById('kpiCacheHitRatioSub').textContent = d.cache.hitRatioSub;
+  document.getElementById('kpiCacheCard').className = 'card kpi ' + (d.cache.good ? 'good' : 'warn');
+  document.getElementById('kpiBytesServed').textContent = d.bandwidth.totalBytesLabel;
+  document.getElementById('kpiWafCoverage').textContent = d.waf.coverage;
+  document.getElementById('kpiWafCoverageSub').textContent = d.waf.coverageSub;
+
   rpsChart.data.labels = d.timeline.labels;
   rpsChart.data.datasets[0].data = d.timeline.rps;
   rpsChart.update();
   latChart.data.labels = d.timeline.labels;
   latChart.data.datasets[0].data = d.timeline.p95;
   latChart.update();
+
+  bandwidthChart.data.labels = d.timeline.labels;
+  bandwidthChart.data.datasets[0].data = d.bandwidth.perBin;
+  bandwidthChart.update();
+
+  cacheChart.data.labels = d.cache.breakdown.map(x => x.label);
+  cacheChart.data.datasets[0].data = d.cache.breakdown.map(x => x.count);
+  cacheChart.update();
 
   statusChart.data.datasets[0].data = [d.statusBuckets['2xx'], d.statusBuckets['3xx'], d.statusBuckets['4xx'], d.statusBuckets['5xx']];
   statusChart.update();
@@ -757,6 +969,15 @@ function renderAll(d) {
   failChart.data.datasets[0].data = d.topFail.map(x => x.count);
   failChart.update();
   document.getElementById('failHint').textContent = d.failHint;
+
+  contentTypeChart.data.labels = d.contentType.map(x => x.label);
+  contentTypeChart.data.datasets[0].data = d.contentType.map(x => x.count);
+  contentTypeChart.update();
+
+  wafFullLabels = d.waf.topSignals.map(x => x.signal);
+  wafChart.data.labels = d.waf.topSignals.map(x => x.signal.length > 28 ? x.signal.slice(0, 28) + '…' : x.signal);
+  wafChart.data.datasets[0].data = d.waf.topSignals.map(x => x.count);
+  wafChart.update();
 
   slowChart.data.labels = d.topSlow.map(x => `${x.endpoint} (n=${x.count})`);
   slowChart.data.datasets[0].data = d.topSlow.map(x => x.p95);
