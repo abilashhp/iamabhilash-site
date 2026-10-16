@@ -201,6 +201,22 @@
     </details>
   </div>
 
+  <div class="card">
+    <h2>Time Range <span id="rangeBadge" class="badge" style="background:var(--gridline); color:var(--text-muted);">full range</span></h2>
+    <p class="hint">Zoom into a window to re-analyze just that slice — every widget below, including Custom Query, re-runs on only this range.</p>
+    <div class="filter-row" style="flex-wrap: wrap; align-items: center; gap: 10px;">
+      <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">From
+        <input type="datetime-local" id="rangeFrom" step="1" disabled style="padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); font-size:13px;">
+      </label>
+      <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">To
+        <input type="datetime-local" id="rangeTo" step="1" disabled style="padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); font-size:13px;">
+      </label>
+      <button class="btn primary" id="applyRangeBtn" disabled>Apply range</button>
+      <button class="btn" id="resetRangeBtn" disabled>Reset to full range</button>
+      <span id="rangeStatus" style="font-size:12px; color:var(--text-muted);"></span>
+    </div>
+  </div>
+
   <div class="kpi-row">
     <div class="card kpi">
       <div class="label">Total Requests</div>
@@ -304,10 +320,16 @@
       <div class="chart-box"><canvas id="contentTypeChart"></canvas></div>
     </div>
     <div class="card">
-      <h2>Top WAF Info Signals</h2>
-      <p class="hint" id="wafHint">Web Application Firewall Info (field 62), tokenized and tallied</p>
+      <h2>Top WAF Rules Triggered</h2>
+      <p class="hint" id="wafHint">WAF Info (field 62) — human-readable rule/attack-signature name, not the app ID or numeric rule ID</p>
       <div class="chart-box"><canvas id="wafChart"></canvas></div>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Client Reputation Signals</h2>
+    <p class="hint" id="reputationHint">Akamai's own bot/threat classification (field 70 "rep2="), not a User-Agent guess — higher score = stronger signal</p>
+    <div class="chart-box"><canvas id="reputationChart"></canvas></div>
   </div>
 
   <div class="card">
@@ -327,6 +349,7 @@
         <tr>
           <th data-key="ip">IP</th>
           <th data-key="requests">Requests</th>
+          <th data-key="peak_60s">Peak (60s)</th>
           <th data-key="blocked">Blocked (403/429)</th>
           <th data-key="top_status">Top Status</th>
           <th data-key="waf_reason">WAF Reason</th>
@@ -382,19 +405,31 @@
       <span id="queryStatus" style="font-size:12px; color:var(--text-muted); align-self:center;"></span>
     </div>
     <pre id="queryOutput" style="margin-top:10px; max-height:320px; overflow:auto; font-family:ui-monospace,monospace; font-size:12px; line-height:1.5; background:var(--page-plane); border:1px solid var(--border); border-radius:7px; padding:10px; white-space:pre-wrap; word-break:break-all;"></pre>
+    <div class="filter-row" style="margin-top:10px; flex-wrap:wrap; align-items:center; border-top:1px solid var(--border); padding-top:10px;">
+      <input id="savedQueryName" type="text" placeholder="Name this query to save it, e.g. &quot;credential scan&quot;…" style="flex:1; min-width:180px; padding:7px 10px; border-radius:6px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); font-size:13px;">
+      <button class="btn" id="saveQueryBtn">Save current query</button>
+      <select id="savedQuerySelect" style="padding:7px 10px; border-radius:6px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); font-size:13px; min-width:160px;">
+        <option value="">Saved queries…</option>
+      </select>
+      <button class="btn" id="loadSavedQueryBtn">Load &amp; run</button>
+      <button class="btn" id="deleteSavedQueryBtn">Delete</button>
+    </div>
   </div>
 
   <details>
     <summary>Raw aggregate data (status codes, security pattern hits, origin hosts)</summary>
     <div class="card" style="margin-top:8px;">
+      <div class="filter-row">
+        <button class="btn" id="exportJsonBtn">Download dashboard summary (JSON)</button>
+      </div>
       <table>
         <thead><tr><th>Metric</th><th>Value</th></tr></thead>
         <tbody id="rawTable"></tbody>
       </table>
       <p class="foot-note">
-        Latency figures use the edge log's positional numeric field inferred as processing time (ms) — no published
-        field schema was available for this log format, so treat as a best-effort proxy rather than certified origin timing.
-        Format: Akamai edge/WAF delivery log, record types <code>r</code> (client request) and <code>f</code> (origin/forward leg).
+        Latency figures use Turnaround time (field 6), the documented positional field closest to end-to-end edge
+        processing time. Format: Akamai Ghost edge/WAF delivery log, record types <code>r</code> (client request)
+        and <code>f</code> (origin/forward leg).
       </p>
     </div>
   </details>
@@ -453,13 +488,19 @@ const SAMPLE_DATA = {
   waf: {
     coverage: "19.3%", coverageSub: "108 of 559 requests carried WAF info",
     topSignals: [
-      {signal: "OUTBOUND", count: 108},
-      {signal: "anomaly_score=16", count: 61},
+      {signal: "LFI-ANOMALY", count: 55},
       {signal: "SQL_Injection", count: 42},
-      {signal: "XSS", count: 11},
-      {signal: "RCE", count: 6}
+      {signal: "XSS-ANOMALY", count: 11},
+      {signal: "REP_192115", count: 6}
     ]
   },
+  topReputation: [
+    {context: "SCANTL", count: 103, avgScore: 9.1},
+    {context: "WEBATCK", count: 61, avgScore: 8.4},
+    {context: "SHARED", count: 48, avgScore: 0},
+    {context: "NOSCR", count: 347, avgScore: 0}
+  ],
+  coverageGap: { seconds: 2820, pctOfWindow: 8.0, startStr: "2026-09-17 13:42:07" },
   statusBuckets: { "2xx": 290, "3xx": 161, "4xx": 108, "5xx": 0 },
   statusHint: "559 client-facing requests",
   failHint: "404 + 5xx = 0 in this sample — shown instead: 4xx (WAF-blocked + rate-limited) by normalized endpoint",
@@ -483,18 +524,18 @@ const SAMPLE_DATA = {
     {endpoint: "signin.example.co.uk /signin/{token}", p95: 131.1, count: 2}
   ],
   ipTable: [
-    {ip:"203.0.113.10", requests:50, blocked:50, top_status:"403", waf_reason:"waf_deny|custom_rule_match", hosts:1, ua_sample:"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:127.0)"},
-    {ip:"198.51.100.21", requests:23, blocked:0, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-    {ip:"198.51.100.42", requests:19, blocked:0, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-    {ip:"203.0.113.55", requests:18, blocked:1, top_status:"202", waf_reason:"bot_mgmt|challenge", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
-    {ip:"198.51.100.88", requests:16, blocked:1, top_status:"200", waf_reason:"bot_mgmt|challenge", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-    {ip:"203.0.113.146", requests:14, blocked:0, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)"},
-    {ip:"198.51.100.47", requests:12, blocked:0, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-    {ip:"203.0.113.36", requests:12, blocked:0, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
-    {ip:"192.0.2.202", requests:10, blocked:10, top_status:"403", waf_reason:"waf_deny|custom_rule_match", hosts:1, ua_sample:"Mozilla/5.0 (compatible; SecurityResearch/1.0)"},
-    {ip:"198.51.100.208", requests:9, blocked:0, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-    {ip:"203.0.113.143", requests:9, blocked:0, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
-    {ip:"192.0.2.96", requests:9, blocked:0, top_status:"307", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:85.0) Firefox/85.0"}
+    {ip:"203.0.113.10", requests:50, blocked:50, peak_60s:34, top_status:"403", waf_reason:"waf_deny|custom_rule_match", hosts:1, ua_sample:"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:127.0)"},
+    {ip:"198.51.100.21", requests:23, blocked:0, peak_60s:4, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"198.51.100.42", requests:19, blocked:0, peak_60s:3, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"203.0.113.55", requests:18, blocked:1, peak_60s:3, top_status:"202", waf_reason:"bot_mgmt|challenge", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
+    {ip:"198.51.100.88", requests:16, blocked:1, peak_60s:2, top_status:"200", waf_reason:"bot_mgmt|challenge", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"203.0.113.146", requests:14, blocked:0, peak_60s:2, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)"},
+    {ip:"198.51.100.47", requests:12, blocked:0, peak_60s:2, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"203.0.113.36", requests:12, blocked:0, peak_60s:2, top_status:"202", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
+    {ip:"192.0.2.202", requests:10, blocked:10, peak_60s:9, top_status:"403", waf_reason:"waf_deny|custom_rule_match", hosts:1, ua_sample:"Mozilla/5.0 (compatible; SecurityResearch/1.0)"},
+    {ip:"198.51.100.208", requests:9, blocked:0, peak_60s:1, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+    {ip:"203.0.113.143", requests:9, blocked:0, peak_60s:1, top_status:"200", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Linux; Android 10; K) Chrome"},
+    {ip:"192.0.2.96", requests:9, blocked:0, peak_60s:1, top_status:"307", waf_reason:"-", hosts:1, ua_sample:"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:85.0) Firefox/85.0"}
   ],
   rawCounts: {
     "Status 200": 224, "Status 202": 66, "Status 301": 36, "Status 302": 19,
@@ -503,6 +544,8 @@ const SAMPLE_DATA = {
     "Security: env/config file scan attempts": 15,
     "Security: encoded path-traversal attempts": 2,
     "Security: SQLi / XSS probes detected": 0,
+    "Security: True Client IP differs from edge Client IP": 9,
+    "Log coverage: largest gap between requests": "47m 0s (8.0% of window), starting 2026-09-17 13:42:07 UTC",
     "Origin upstream: origin-pool-1.internal.example": 225,
     "Origin upstream: primary-origin.example.com": 134,
     "Origin upstream: 127.0.0.1 (edge-local)": 82
@@ -551,6 +594,30 @@ function topCounterEntry(counter) {
   for (const [k, v] of counter.entries()) if (!best || v > best[1]) best = [k, v];
   return best;
 }
+// Several of the richest security fields (client reputation, bot manager,
+// rate-limit state) live inside one big multi-purpose name/value field
+// (semicolon-joined "key=value" pairs within a single space-delimited
+// token), and its exact position can drift a field or two across Ghost log
+// versions. Check the commonly-observed index first, then fall back to a
+// full scan so this stays correct even if that drifts.
+function extractNamedValue(fields, key, likelyIdx) {
+  const pluck = (tok) => {
+    const i = tok.indexOf(key);
+    if (i === -1) return null;
+    const rest = tok.slice(i + key.length);
+    const end = rest.indexOf(';');
+    return end === -1 ? rest : rest.slice(0, end);
+  };
+  if (likelyIdx != null && fields[likelyIdx]) {
+    const v = pluck(fields[likelyIdx]);
+    if (v !== null) return v;
+  }
+  for (const tok of fields) {
+    const v = pluck(tok);
+    if (v !== null) return v;
+  }
+  return null;
+}
 function topNEntries(counter, n) {
   return [...counter.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
 }
@@ -560,6 +627,13 @@ function humanBytes(n) {
   let v = n, i = 0;
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
   return (i > 0 && v < 10 ? v.toFixed(1) : Math.round(v)) + ' ' + units[i];
+}
+function humanDuration(totalSeconds) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return '0s';
+  const h = Math.floor(totalSeconds / 3600), m = Math.floor((totalSeconds % 3600) / 60), s = Math.round(totalSeconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 // Object status information (r-line field 16) is NOT a cache-status string
 // like "TCP_HIT" — per the Ghost log format spec it's a cumulative set of
@@ -679,6 +753,12 @@ function analyze(rLines, fLines) {
   const wafTokenCounts = new Map();
   let wafHitRequests = 0;
   let totalBytesServed = 0;
+  // Client reputation context (e.g. SCANTL = scanner, WEBATCK = web
+  // attacker) extracted from the "rep2=" sub-field — this is Akamai's own
+  // bot/threat classification, distinct from (and more reliable than)
+  // regexing the User-Agent string.
+  const reputationCounts = new Map(); // context -> { count, scoreSum }
+  let trueClientIpMismatches = 0;
   for (const f of rLines) {
     statusCounts.set(f[13], (statusCounts.get(f[13]) || 0) + 1);
     statusBuckets[bucketOf(f[13])]++;
@@ -691,13 +771,35 @@ function analyze(rLines, fLines) {
     const ct = (f[16] || '-').split(';')[0].split(',')[0].trim() || '-';
     ctCounts.set(ct, (ctCounts.get(ct) || 0) + 1);
 
+    // Field 62: "appId|ruleId|ruleName" when the WAF engine evaluated this
+    // request. The last segment is the human-readable attack signature
+    // (e.g. "LFI-ANOMALY") — far more actionable to tally than the app ID
+    // or numeric rule ID that precede it.
     const wafRaw = f[61];
     if (wafRaw && wafRaw !== '-') {
       wafHitRequests++;
-      for (const tok of wafRaw.split(/[;,|]+/).map(t => t.trim()).filter(t => t && t !== '-')) {
-        wafTokenCounts.set(tok, (wafTokenCounts.get(tok) || 0) + 1);
+      const parts = wafRaw.split('|').map(p => p.trim()).filter(Boolean);
+      const ruleName = parts.length ? parts[parts.length - 1] : wafRaw;
+      wafTokenCounts.set(ruleName, (wafTokenCounts.get(ruleName) || 0) + 1);
+    }
+
+    const rep2 = extractNamedValue(f, 'rep2=', 70);
+    if (rep2) {
+      for (const m of rep2.matchAll(/ctx\/([A-Za-z0-9]+)#(\d+)/g)) {
+        const ctx = m[1], score = parseInt(m[2], 10);
+        if (!reputationCounts.has(ctx)) reputationCounts.set(ctx, { count: 0, scoreSum: 0 });
+        const r = reputationCounts.get(ctx);
+        r.count++; r.scoreSum += score;
       }
     }
+
+    // Field 60: True Client IP (first public IP in X-Forwarded-For, or the
+    // peer socket IP if none). When it differs from field 11 (Client IP,
+    // the edge-observed peer), this request passed through an upstream
+    // proxy/CDN — worth flagging since IP-based blocking/rate-limiting on
+    // field 11 alone would be acting on the wrong address.
+    const trueClientIp = f[59];
+    if (trueClientIp && trueClientIp !== '-' && trueClientIp !== f[10]) trueClientIpMismatches++;
 
     totalBytesServed += fnum(f[9]);
   }
@@ -761,13 +863,26 @@ function analyze(rLines, fLines) {
   const ipDetail = new Map();
   for (const f of rLines) {
     const ip = f[10];
-    if (!ipDetail.has(ip)) ipDetail.set(ip, { count: 0, statuses: new Map(), reasons: new Map(), uas: new Set(), hosts: new Set() });
+    if (!ipDetail.has(ip)) ipDetail.set(ip, { count: 0, statuses: new Map(), reasons: new Map(), uas: new Set(), hosts: new Set(), timestamps: [] });
     const d = ipDetail.get(ip);
     d.count++;
     d.statuses.set(f[13], (d.statuses.get(f[13]) || 0) + 1);
     d.reasons.set(f[14], (d.reasons.get(f[14]) || 0) + 1);
     d.uas.add(safeDecode(f[20]).slice(0, 90));
     d.hosts.add(f[17]);
+    d.timestamps.push(fnum(f[2]));
+  }
+  // Peak rate per IP, same sliding-60s-window algorithm as the global Peak
+  // RPS KPI — surfaces velocity (e.g. an IP ramping up a scan/DoS attempt)
+  // that a flat total-request-count can hide.
+  function peakRequestsIn60s(timestamps) {
+    const ts = timestamps.slice().sort((a, b) => a - b);
+    let peak = 0, left = 0;
+    for (let right = 0; right < ts.length; right++) {
+      while (ts[right] - ts[left] > 60) left++;
+      peak = Math.max(peak, right - left + 1);
+    }
+    return peak;
   }
   const ipTable = [...ipDetail.entries()]
     .sort((a, b) => b[1].count - a[1].count)
@@ -778,7 +893,7 @@ function analyze(rLines, fLines) {
       const reasonsSorted = [...d.reasons.entries()].sort((a, b) => b[1] - a[1]);
       let wafReason = reasonsSorted[0][0];
       if (wafReason === '-' && reasonsSorted.length > 1) wafReason = reasonsSorted[1][0];
-      return { ip, requests: d.count, blocked, top_status: topStatus, waf_reason: wafReason, hosts: d.hosts.size, ua_sample: [...d.uas][0] || '-' };
+      return { ip, requests: d.count, blocked, peak_60s: peakRequestsIn60s(d.timestamps), top_status: topStatus, waf_reason: wafReason, hosts: d.hosts.size, ua_sample: [...d.uas][0] || '-' };
     });
 
   // security pattern hits
@@ -836,6 +951,27 @@ function analyze(rLines, fLines) {
     topSignals: topNEntries(wafTokenCounts, 8).map(([signal, count]) => ({ signal, count }))
   };
 
+  // client reputation (Akamai's own bot/threat classification, not just UA regex)
+  const topReputation = [...reputationCounts.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 8)
+    .map(([context, r]) => ({ context, count: r.count, avgScore: +(r.scoreSum / r.count).toFixed(1) }));
+
+  // log-coverage gap detection: the largest silence between two consecutive
+  // requests. A gap that's a big fraction of the total window can mean the
+  // "quiet period" around an incident is actually a logging hole, not real
+  // silence.
+  let largestGapSec = 0, largestGapStart = t0;
+  for (let i = 1; i < ts.length; i++) {
+    const gap = ts[i] - ts[i - 1];
+    if (gap > largestGapSec) { largestGapSec = gap; largestGapStart = ts[i - 1]; }
+  }
+  const coverageGap = {
+    seconds: Math.round(largestGapSec),
+    pctOfWindow: duration > 0 ? +(largestGapSec / duration * 100).toFixed(1) : 0,
+    startStr: ts.length > 1 ? new Date(largestGapStart * 1000).toISOString().replace('T', ' ').slice(0, 19) : null
+  };
+
   const rawCounts = {};
   for (const [k, v] of [...statusCounts.entries()].sort()) rawCounts[`Status ${k}`] = v;
   for (const [k, v] of methodCounts.entries()) rawCounts[`Method ${k}`] = v;
@@ -848,6 +984,10 @@ function analyze(rLines, fLines) {
   rawCounts['Bandwidth: total bytes served'] = bandwidth.totalBytesLabel;
   rawCounts['WAF: requests carrying WAF info'] = wafHitRequests;
   if (topWafSignal) rawCounts['WAF: top signal token'] = `${topWafSignal[0]} (${topWafSignal[1]})`;
+  rawCounts['Security: True Client IP differs from edge Client IP'] = trueClientIpMismatches;
+  if (coverageGap.seconds > 0) {
+    rawCounts['Log coverage: largest gap between requests'] = `${humanDuration(coverageGap.seconds)} (${coverageGap.pctOfWindow}% of window)${coverageGap.startStr ? ', starting ' + coverageGap.startStr + ' UTC' : ''}`;
+  }
   for (const [k, v] of [...fUpstream.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)) rawCounts[`Origin upstream: ${k}`] = v;
 
   const startStr = new Date(t0 * 1000).toISOString().replace('T', ' ').slice(0, 19);
@@ -876,6 +1016,8 @@ function analyze(rLines, fLines) {
     bandwidth,
     contentType,
     waf,
+    topReputation,
+    coverageGap,
     statusBuckets: { '2xx': statusBuckets['2xx'], '3xx': statusBuckets['3xx'], '4xx': statusBuckets['4xx'], '5xx': statusBuckets['5xx'] },
     statusHint: `${total} client-facing requests`,
     failHint: count404 === 0 && count5xx === 0
@@ -979,6 +1121,15 @@ const wafChart = new Chart(document.getElementById('wafChart'), {
     plugins: { legend: { display: false }, tooltip: { callbacks: { title: (items) => wafFullLabels[items[0].dataIndex] || items[0].label } } },
     scales: { x: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, precision: 0 } }, y: { grid: { display: false }, ticks: { color: tickColor } } } }
 });
+const reputationChart = new Chart(document.getElementById('reputationChart'), {
+  type: 'bar',
+  data: { labels: [], datasets: [{ label: 'Occurrences', data: [], backgroundColor: CATEGORICAL_PALETTE, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, borderSkipped: false, maxBarThickness: 48 }] },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false },
+      tooltip: { callbacks: { afterLabel: (ctx) => `avg score: ${reputationAvgScores[ctx.dataIndex] ?? '-'}` } } },
+    scales: { x: { grid: { display: false }, ticks: { color: tickColor, autoSkip: false, maxRotation: 20 } }, y: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, precision: 0 } } } }
+});
+let reputationAvgScores = [];
 
 function statusPillClass(s) {
   const n = parseInt(s, 10);
@@ -995,6 +1146,7 @@ function renderTable() {
     <tr>
       <td>${r.ip}</td>
       <td>${r.requests}</td>
+      <td>${r.peak_60s}</td>
       <td>${r.blocked}</td>
       <td><span class="${statusPillClass(r.top_status)}">${r.top_status}</span></td>
       <td>${r.waf_reason}</td>
@@ -1013,7 +1165,9 @@ document.querySelectorAll('#ipTable th').forEach(th => {
 });
 document.getElementById('ipFilter').addEventListener('input', renderTable);
 
+let lastAnalyzeResult = null;
 function renderAll(d) {
+  lastAnalyzeResult = d;
   document.getElementById('pageTitle').childNodes[0].nodeValue = `Edge Log Analysis — ${d.meta.title.replace('Edge Log Analysis — ', '')} `;
   document.getElementById('pageSubtitle').textContent = d.meta.subtitle;
   const badgeEl = document.getElementById('statusBadge');
@@ -1080,6 +1234,14 @@ function renderAll(d) {
   wafChart.data.labels = d.waf.topSignals.map(x => x.signal.length > 28 ? x.signal.slice(0, 28) + '…' : x.signal);
   wafChart.data.datasets[0].data = d.waf.topSignals.map(x => x.count);
   wafChart.update();
+
+  reputationAvgScores = d.topReputation.map(x => x.avgScore);
+  reputationChart.data.labels = d.topReputation.map(x => x.context);
+  reputationChart.data.datasets[0].data = d.topReputation.map(x => x.count);
+  reputationChart.update();
+  document.getElementById('reputationHint').textContent = d.topReputation.length
+    ? 'Akamai\'s own bot/threat classification (field 70 "rep2="), not a User-Agent guess — higher score = stronger signal'
+    : 'No client reputation data found in this file (the "rep2=" sub-field was absent or empty on every request)';
 
   slowChart.data.labels = d.topSlow.map(x => `${x.endpoint} (n=${x.count})`);
   slowChart.data.datasets[0].data = d.topSlow.map(x => x.p95);
@@ -1330,6 +1492,12 @@ const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const uploadStatus = document.getElementById('uploadStatus');
 let currentRawLines = [];
+// The complete, unfiltered parse of whatever's currently loaded. A Time
+// Range selection filters these down into currentRawLines/analyze() inputs
+// without needing to re-parse the raw text.
+let fullRawLines = [], fullRLines = [], fullFLines = [];
+let activeTimeRange = null; // { from, to } in epoch seconds, or null = full range
+let lastSourceLabel = '';
 
 function setStatus(msg, cls) {
   uploadStatus.textContent = msg;
@@ -1345,20 +1513,100 @@ function setQueryEnabled(enabled, badgeText) {
   document.getElementById('queryBadge').style.color = enabled ? 'var(--good)' : 'var(--text-muted)';
   if (enabled) document.getElementById('queryInput').placeholder = "awk '$2==\"r\" {print $14}' | sort | uniq -c | sort -rn";
 }
+function setRangeEnabled(enabled) {
+  document.getElementById('rangeFrom').disabled = !enabled;
+  document.getElementById('rangeTo').disabled = !enabled;
+  document.getElementById('applyRangeBtn').disabled = !enabled;
+  document.getElementById('resetRangeBtn').disabled = !enabled;
+}
+function epochToLocalInputValue(epochSec) {
+  const d = new Date(epochSec * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+function localInputValueToEpoch(v) {
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t / 1000 : null;
+}
 
-function analyzeText(combined, sourceLabel) {
-  const { lines, rLines, fLines } = parseLogText(combined);
-  currentRawLines = lines;
-  setQueryEnabled(lines.length > 0, `${lines.length} lines loaded`);
+// Applies activeTimeRange (if any) to the full parsed dataset, returning the
+// slice that analyze() and Custom Query should both operate on.
+function applyActiveRange() {
+  if (!activeTimeRange) return { rLines: fullRLines, fLines: fullFLines, rawLines: fullRawLines };
+  const { from, to } = activeTimeRange;
+  const inRange = (f) => { const t = fnum(f[2]); return t >= from && t <= to; };
+  const rLines = fullRLines.filter(inRange);
+  const fLines = fullFLines.filter(inRange);
+  const rawLines = fullRawLines.filter(l => {
+    const f = l.split(' ');
+    if (f[1] !== 'r' && f[1] !== 'f') return false;
+    return inRange(f);
+  });
+  return { rLines, fLines, rawLines };
+}
+
+function refreshDashboard() {
+  const { rLines, fLines, rawLines } = applyActiveRange();
+  currentRawLines = rawLines;
+  setQueryEnabled(rawLines.length > 0, `${rawLines.length} lines loaded`);
+  const badge = document.getElementById('rangeBadge');
+  const statusEl = document.getElementById('rangeStatus');
+  if (activeTimeRange) {
+    badge.textContent = 'filtered';
+    badge.style.background = 'color-mix(in srgb, var(--series-1) 20%, transparent)';
+    badge.style.color = 'var(--series-1)';
+    statusEl.textContent = `Showing ${rLines.length} of ${fullRLines.length} client requests in this window.`;
+  } else {
+    badge.textContent = 'full range';
+    badge.style.background = 'var(--gridline)';
+    badge.style.color = 'var(--text-muted)';
+    statusEl.textContent = fullRLines.length ? `${fullRLines.length} client requests total.` : '';
+  }
   if (rLines.length === 0) {
-    setStatus(`No recognized Akamai r/f records found for the KPI dashboard, but ${lines.length} raw lines are loaded — the Custom Query box below will still work on them. ${sourceLabel}, 0 usable KPI lines.`, 'error');
-    return false;
+    setStatus(`No client-facing (r-type) records in this ${activeTimeRange ? 'time range' : 'file'} — the Custom Query box will still work on whatever raw lines are in scope.`, 'error');
+    return;
   }
   const result = analyze(rLines, fLines);
   renderAll(result);
-  setStatus(`${sourceLabel} — parsed ${rLines.length} client requests + ${fLines.length} origin legs.`, 'success');
-  return true;
+  const suffix = activeTimeRange ? ` (time-filtered: ${rLines.length} of ${fullRLines.length} requests)` : '';
+  setStatus(`${lastSourceLabel} — parsed ${rLines.length} client requests + ${fLines.length} origin legs.${suffix}`, 'success');
 }
+
+function analyzeText(combined, sourceLabel) {
+  const { lines, rLines, fLines } = parseLogText(combined);
+  fullRawLines = lines;
+  fullRLines = rLines;
+  fullFLines = fLines;
+  activeTimeRange = null;
+  lastSourceLabel = sourceLabel;
+  setRangeEnabled(rLines.length > 0);
+  if (rLines.length > 0) {
+    const ts = rLines.map(f => fnum(f[2]));
+    document.getElementById('rangeFrom').value = epochToLocalInputValue(Math.min(...ts));
+    document.getElementById('rangeTo').value = epochToLocalInputValue(Math.max(...ts));
+  }
+  refreshDashboard();
+  return rLines.length > 0;
+}
+document.getElementById('applyRangeBtn').addEventListener('click', () => {
+  const from = localInputValueToEpoch(document.getElementById('rangeFrom').value);
+  const to = localInputValueToEpoch(document.getElementById('rangeTo').value);
+  if (from === null || to === null || from > to) {
+    document.getElementById('rangeStatus').textContent = 'Invalid range — "From" must be a valid time at or before "To".';
+    return;
+  }
+  activeTimeRange = { from, to };
+  refreshDashboard();
+});
+document.getElementById('resetRangeBtn').addEventListener('click', () => {
+  activeTimeRange = null;
+  if (fullRLines.length > 0) {
+    const ts = fullRLines.map(f => fnum(f[2]));
+    document.getElementById('rangeFrom').value = epochToLocalInputValue(Math.min(...ts));
+    document.getElementById('rangeTo').value = epochToLocalInputValue(Math.max(...ts));
+  }
+  refreshDashboard();
+});
 
 async function handleFiles(fileList) {
   const files = [...fileList];
@@ -1379,7 +1627,15 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   renderAll(SAMPLE_DATA);
   fileInput.value = '';
   currentRawLines = [];
+  fullRawLines = []; fullRLines = []; fullFLines = []; activeTimeRange = null; lastSourceLabel = '';
   setQueryEnabled(false, 'no file loaded');
+  setRangeEnabled(false);
+  document.getElementById('rangeFrom').value = '';
+  document.getElementById('rangeTo').value = '';
+  document.getElementById('rangeStatus').textContent = '';
+  document.getElementById('rangeBadge').textContent = 'full range';
+  document.getElementById('rangeBadge').style.background = 'var(--gridline)';
+  document.getElementById('rangeBadge').style.color = 'var(--text-muted)';
   document.getElementById('queryInput').value = '';
   document.getElementById('nlInput').value = '';
   document.getElementById('nlExplain').textContent = '';
@@ -1729,11 +1985,66 @@ document.querySelectorAll('[data-example]').forEach(btn => {
     runCustomQuery();
   });
 });
+/* ---------- Saved queries (localStorage) ---------- */
+const SAVED_QUERIES_KEY = 'edgeLogAnalyzer.savedQueries';
+function loadSavedQueries() {
+  try { return JSON.parse(localStorage.getItem(SAVED_QUERIES_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+function persistSavedQueries(list) {
+  try { localStorage.setItem(SAVED_QUERIES_KEY, JSON.stringify(list)); } catch (e) { /* storage unavailable/full — ignore */ }
+}
+function renderSavedQueryOptions() {
+  const select = document.getElementById('savedQuerySelect');
+  const current = select.value;
+  select.innerHTML = '<option value="">Saved queries…</option>' +
+    loadSavedQueries().map(q => `<option value="${q.name.replace(/"/g, '&quot;')}">${q.name}</option>`).join('');
+  select.value = loadSavedQueries().some(q => q.name === current) ? current : '';
+}
+document.getElementById('saveQueryBtn').addEventListener('click', () => {
+  const name = document.getElementById('savedQueryName').value.trim();
+  const command = document.getElementById('queryInput').value.trim();
+  if (!name) { document.getElementById('queryStatus').textContent = 'Give the query a name before saving.'; return; }
+  if (!command) { document.getElementById('queryStatus').textContent = 'Nothing to save — the query box is empty.'; return; }
+  const list = loadSavedQueries().filter(q => q.name !== name);
+  list.push({ name, command });
+  persistSavedQueries(list);
+  renderSavedQueryOptions();
+  document.getElementById('savedQuerySelect').value = name;
+  document.getElementById('savedQueryName').value = '';
+  document.getElementById('queryStatus').style.color = 'var(--good)';
+  document.getElementById('queryStatus').textContent = `Saved "${name}".`;
+});
+document.getElementById('loadSavedQueryBtn').addEventListener('click', () => {
+  const name = document.getElementById('savedQuerySelect').value;
+  if (!name) return;
+  const q = loadSavedQueries().find(q => q.name === name);
+  if (!q) return;
+  document.getElementById('queryInput').value = q.command;
+  if (!document.getElementById('queryInput').disabled) runCustomQuery();
+});
+document.getElementById('deleteSavedQueryBtn').addEventListener('click', () => {
+  const name = document.getElementById('savedQuerySelect').value;
+  if (!name) return;
+  persistSavedQueries(loadSavedQueries().filter(q => q.name !== name));
+  renderSavedQueryOptions();
+});
+renderSavedQueryOptions();
+
 document.getElementById('downloadQueryBtn').addEventListener('click', () => {
   const blob = new Blob([lastQueryOutput.join('\n') + '\n'], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = 'query-output.txt'; a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('exportJsonBtn').addEventListener('click', () => {
+  if (!lastAnalyzeResult) return;
+  const payload = { exportedAt: new Date().toISOString(), timeRange: activeTimeRange, ...lastAnalyzeResult };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'edge-log-analysis-summary.json'; a.click();
   URL.revokeObjectURL(url);
 });
 
