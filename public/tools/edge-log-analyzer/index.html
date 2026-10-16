@@ -110,6 +110,18 @@
   #uploadStatus { font-size: 12px; color: var(--text-muted); width: 100%; margin-top: 4px; }
   #uploadStatus.error { color: var(--critical); }
   #uploadStatus.success { color: var(--good); }
+  .paste-row { width: 100%; }
+  .paste-row summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); }
+  .paste-row summary:hover { color: var(--text-primary); }
+  #pasteBox {
+    width: 100%; margin-top: 8px; display: flex; flex-direction: column; gap: 8px;
+  }
+  #pasteInput {
+    width: 100%; min-height: 140px; resize: vertical; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px; padding: 10px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--page-plane); color: var(--text-primary);
+  }
+  .paste-actions { display: flex; gap: 8px; }
 
   .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
   @media (max-width: 1100px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
@@ -168,12 +180,23 @@
   <div class="upload-card" id="dropZone">
     <div class="drop-label">
       <strong>Upload raw log file(s) to refresh this dashboard</strong>
-      <span>Drag &amp; drop, or choose files — parsed entirely in your browser, nothing is uploaded anywhere. Supports the Akamai edge/WAF delivery log format (space-delimited records, type <code>r</code>/<code>f</code>).</span>
+      <span>Drag &amp; drop, choose files, or paste raw lines below — parsed entirely in your browser, nothing is uploaded anywhere. Supports the Akamai edge/WAF delivery log format (space-delimited records, type <code>r</code>/<code>f</code>).</span>
       <span id="uploadStatus"></span>
     </div>
     <button class="btn primary" id="chooseBtn">Choose files…</button>
     <button class="btn" id="resetBtn">Reset to sample data</button>
-    <input type="file" id="fileInput" multiple accept=".txt,.log,.csv">
+    <input type="file" id="fileInput" multiple>
+
+    <details class="paste-row">
+      <summary>…or paste raw log lines instead</summary>
+      <div id="pasteBox">
+        <textarea id="pasteInput" placeholder="Paste raw edge/WAF log lines here, one record per line…" spellcheck="false"></textarea>
+        <div class="paste-actions">
+          <button class="btn primary" id="analyzePasteBtn">Analyze pasted lines</button>
+          <button class="btn" id="clearPasteBtn">Clear</button>
+        </div>
+      </div>
+    </details>
   </div>
 
   <div class="kpi-row">
@@ -261,6 +284,52 @@
       </thead>
       <tbody></tbody>
     </table>
+  </div>
+
+  <div class="card">
+    <h2>Custom Query <span id="queryBadge" class="badge" style="background:var(--gridline); color:var(--text-muted);">no file loaded</span></h2>
+    <p class="hint">
+      Describe what you want in plain English — this runs entirely in your browser via a small pattern-matcher
+      (no AI, no API calls, nothing leaves your machine). It recognizes every documented r-line and f-line column
+      by name (e.g. "object status information", "turnaround time", "forward hostname") or by number
+      ("field 16", "column 24"), and shows you the exact AWK command it built, which you can edit directly below.
+      Mention "f line" / "origin leg" / "upstream" to query origin/forward-leg records instead of client-facing ones.
+      Full column reference: <a href="/tools/edge-log-analyzer/log-line-fields.pdf" target="_blank" rel="noopener">download the field list (PDF)</a>.
+    </p>
+    <div class="filter-row">
+      <input id="nlInput" type="text" disabled
+        placeholder="e.g. &quot;For 403s show object status information&quot;, &quot;field 16 for status 403&quot;, &quot;top 10 client IPs&quot;…"
+        style="flex:1; padding:9px 12px; border-radius:7px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); font-size:13px;">
+      <button class="btn primary" id="nlTranslateBtn" disabled>Translate &amp; Run</button>
+    </div>
+    <div id="nlExplain" style="font-size:12px; margin:6px 0 2px; min-height:16px;"></div>
+
+    <details style="margin-top:10px;">
+      <summary>Advanced: write AWK + pipeline directly</summary>
+      <p class="hint" style="margin-top:10px;">
+        Supports <code>$1</code>…<code>$N</code>, <code>$0</code>, <code>$NF</code>, <code>NR</code>, <code>NF</code>,
+        <code>== != ~ !~ &lt; &lt;= &gt; &gt;= &amp;&amp; || !</code>, string concatenation, and <code>print</code>.
+        Pipe into <code>sort [-n -r -u]</code>, <code>uniq [-c]</code>, <code>head</code>/<code>tail</code> <code>[-N]</code>,
+        <code>grep [-v -i] PATTERN</code>, or <code>wc -l</code>. Field numbers follow the documented r-line / f-line
+        column layout (1-indexed) — e.g. on r-lines <code>$14</code>=status, <code>$16</code>=object status
+        information; on f-lines <code>$15</code>=status, <code>$24</code>=forward hostname.
+      </p>
+      <div class="filter-row" style="flex-wrap: wrap;">
+        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $14}' | sort | uniq -c | sort -rn">status code tally</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; && $15!=&quot;-&quot; {print $14 &quot;\t&quot; $15 &quot;\t&quot; $13}' | sort | uniq -c | sort -rn">errors + URI</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; && $12==&quot;GET&quot; {print $11}' | sort | uniq -c | sort -rn | head -10">top GET client IPs</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; && $14==&quot;403&quot; {print $16}' | sort | uniq -c | sort -rn">403s → object status info</button>
+      </div>
+      <textarea id="queryInput" disabled rows="3" placeholder="Upload a log file above to enable custom queries…"
+        style="width:100%; font-family:ui-monospace,monospace; font-size:12.5px; padding:10px; border-radius:7px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); resize:vertical;"></textarea>
+    </details>
+    <div class="filter-row" style="margin-top:8px;">
+      <button class="btn primary" id="runQueryBtn" disabled>Run</button>
+      <button class="btn" id="clearQueryBtn">Clear</button>
+      <button class="btn" id="downloadQueryBtn" style="display:none;">Download full output (.txt)</button>
+      <span id="queryStatus" style="font-size:12px; color:var(--text-muted); align-self:center;"></span>
+    </div>
+    <pre id="queryOutput" style="margin-top:10px; max-height:320px; overflow:auto; font-family:ui-monospace,monospace; font-size:12px; line-height:1.5; background:var(--page-plane); border:1px solid var(--border); border-radius:7px; padding:10px; white-space:pre-wrap; word-break:break-all;"></pre>
   </div>
 
   <details>
@@ -351,11 +420,13 @@ const SAMPLE_DATA = {
 };
 
 /* ---------- Parsing engine (Akamai edge/WAF delivery log) ---------- */
-/* Record type 'r' (client-facing, >=91 space-delimited fields):
-     [2]=epoch ts  [3]=edge time proxy(ms)  [10]=client ip  [11]=method
-     [12]=uri  [13]=status  [14]=waf/error reason  [17]=host  [20]=user-agent (url-encoded)
+/* Field numbers below follow the documented r/f column layout (1-indexed,
+   i.e. array index = field number - 1):
+   Record type 'r' (client-facing, >=91 space-delimited fields):
+     [2]=epoch ts(3)  [5]=turnaround time(6, latency proxy)  [10]=client ip(11)  [11]=method(12)
+     [12]=ARL/uri(13)  [13]=status(14)  [14]=error reason(15)  [17]=host header(18)  [20]=user-agent(21, url-encoded)
    Record type 'f' (origin/forward leg, 63-90 fields):
-     [14]=status  [23]=upstream host                                            */
+     [14]=status(15)  [23]=forward hostname(24)                                 */
 
 function pct(sortedArr, p) {
   if (!sortedArr.length) return 0;
@@ -408,7 +479,7 @@ function analyze(rLines, fLines) {
   const duration = Math.max(t1 - t0, 0.001);
 
   // latency
-  const lat = rLines.map(f => fnum(f[3])).sort((a, b) => a - b);
+  const lat = rLines.map(f => fnum(f[5])).sort((a, b) => a - b);
   const latency = {
     avg: lat.reduce((a, b) => a + b, 0) / (lat.length || 1),
     p50: pct(lat, 0.5), p90: pct(lat, 0.9), p95: pct(lat, 0.95), p99: pct(lat, 0.99),
@@ -435,7 +506,7 @@ function analyze(rLines, fLines) {
     let idx = Math.min(Math.floor((t - t0) / binWidth), NBINS - 1);
     if (idx < 0) idx = 0;
     binCounts[idx]++;
-    binLat[idx].push(fnum(f[3]));
+    binLat[idx].push(fnum(f[5]));
   }
   const binRps = binCounts.map(c => +(c / binWidth).toFixed(4));
   const binP95 = binLat.map(arr => arr.length ? +pct(arr.slice().sort((a, b) => a - b), 0.95).toFixed(1) : 0);
@@ -460,7 +531,7 @@ function analyze(rLines, fLines) {
   for (const f of rLines) {
     const n = normalizeUri(f[12]);
     if (!latByNorm.has(n)) latByNorm.set(n, []);
-    latByNorm.get(n).push(fnum(f[3]));
+    latByNorm.get(n).push(fnum(f[5]));
     const b = bucketOf(f[13]);
     if (b === '4xx' || b === '5xx') failByNorm.set(n, (failByNorm.get(n) || 0) + 1);
   }
@@ -698,14 +769,272 @@ function renderAll(d) {
     .map(([k, v]) => `<tr><td>${k}</td><td style="font-variant-numeric:tabular-nums;">${v}</td></tr>`).join('');
 }
 
+/* ---------- Mini AWK-subset interpreter + shell-pipe simulator ---------- */
+/* Supports: $N field refs, $0, $NF, NR, NF, numeric/string literals,
+   == != ~ !~ < <= > >= && || !, string concatenation by juxtaposition,
+   a single `pattern {print ...}` rule. Pipeline stages after the awk
+   program: sort [-n -r -u], uniq [-c], head/tail [-N | -n N],
+   grep [-v -i] PATTERN, wc -l. Runs entirely client-side, no server. */
+
+function awkSplitTopLevel(str, sep) {
+  const parts = [];
+  let cur = '', quote = null;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (quote) { cur += c; if (c === quote) quote = null; }
+    else if (c === '"' || c === "'") { quote = c; cur += c; }
+    else if (c === sep) { parts.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  parts.push(cur);
+  return parts.map(s => s.trim()).filter(s => s.length);
+}
+function awkStripQuotes(s) {
+  s = s.trim();
+  if (s.length >= 2 && ((s[0] === "'" && s[s.length - 1] === "'") || (s[0] === '"' && s[s.length - 1] === '"'))) return s.slice(1, -1);
+  return s;
+}
+function awkTokenizeArgs(str) {
+  const out = [];
+  let cur = '', quote = null;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (quote) { if (c === quote) quote = null; else cur += c; }
+    else if (c === '"' || c === "'") quote = c;
+    else if (/\s/.test(c)) { if (cur.length) { out.push(cur); cur = ''; } }
+    else cur += c;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+function lexAwk(src) {
+  const tokens = []; let i = 0; const n = src.length;
+  const prevType = () => tokens.length ? tokens[tokens.length - 1].type : null;
+  while (i < n) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === '$') {
+      i++;
+      let m = /^\d+/.exec(src.slice(i));
+      if (m) { tokens.push({ type: 'FIELD', value: parseInt(m[0], 10) }); i += m[0].length; continue; }
+      let m2 = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i));
+      if (m2) { tokens.push({ type: 'FIELDEXPR', value: m2[0] }); i += m2[0].length; continue; }
+      throw new Error('Expected field number or name after $');
+    }
+    if (c === '"') {
+      i++; let s = '';
+      while (i < n && src[i] !== '"') {
+        if (src[i] === '\\' && i + 1 < n) { const e = src[i + 1]; s += e === 't' ? '\t' : e === 'n' ? '\n' : e === '\\' ? '\\' : e === '"' ? '"' : e; i += 2; }
+        else { s += src[i]; i++; }
+      }
+      if (src[i] !== '"') throw new Error('Unterminated string literal');
+      i++; tokens.push({ type: 'STRING', value: s }); continue;
+    }
+    if (/\d/.test(c)) { let m = /^\d+(\.\d+)?/.exec(src.slice(i)); tokens.push({ type: 'NUMBER', value: parseFloat(m[0]) }); i += m[0].length; continue; }
+    if (c === '/' && (prevType() === '~' || prevType() === '!~')) {
+      i++; let s = '';
+      while (i < n && src[i] !== '/') { if (src[i] === '\\' && i + 1 < n) { s += src[i] + src[i + 1]; i += 2; } else { s += src[i]; i++; } }
+      if (src[i] !== '/') throw new Error('Unterminated regex literal');
+      i++; let flags = ''; while (i < n && /[a-z]/i.test(src[i])) { flags += src[i]; i++; }
+      tokens.push({ type: 'REGEX', value: s, flags }); continue;
+    }
+    if (/[A-Za-z_]/.test(c)) {
+      let m = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i)); const word = m[0]; i += word.length;
+      if (word === 'print') tokens.push({ type: 'PRINT' });
+      else if (word === 'NR') tokens.push({ type: 'NR' });
+      else if (word === 'NF') tokens.push({ type: 'NF' });
+      else tokens.push({ type: 'IDENT', value: word });
+      continue;
+    }
+    const two = src.slice(i, i + 2);
+    if (['==', '!=', '!~', '&&', '||', '<=', '>='].includes(two)) { tokens.push({ type: two }); i += 2; continue; }
+    if ('~<>(){},;!'.includes(c)) { tokens.push({ type: c }); i++; continue; }
+    throw new Error(`Unexpected character '${c}' in awk program`);
+  }
+  tokens.push({ type: 'EOF' });
+  return tokens;
+}
+function parseAwkProgram(src) {
+  const tokens = lexAwk(src); let pos = 0;
+  const peek = () => tokens[pos]; const next = () => tokens[pos++];
+  const expect = (type) => { if (peek().type !== type) throw new Error(`Expected '${type}' but got '${peek().type}'`); return next(); };
+  function parsePrimary() {
+    const t = peek();
+    if (t.type === 'FIELD') { next(); return { kind: 'field', index: { kind: 'num', value: t.value } }; }
+    if (t.type === 'FIELDEXPR') { next(); if (t.value !== 'NF') throw new Error('Only $NF supported as named field'); return { kind: 'field', index: { kind: 'nf' } }; }
+    if (t.type === 'NUMBER') { next(); return { kind: 'num', value: t.value }; }
+    if (t.type === 'STRING') { next(); return { kind: 'str', value: t.value }; }
+    if (t.type === 'REGEX') { next(); return { kind: 'regexlit', value: t.value, flags: t.flags }; }
+    if (t.type === 'NR') { next(); return { kind: 'nr' }; }
+    if (t.type === 'NF') { next(); return { kind: 'nfval' }; }
+    if (t.type === '(') { next(); const e = parseOr(); expect(')'); return e; }
+    if (t.type === '!') { next(); return { kind: 'not', expr: parseUnary() }; }
+    throw new Error(`Unexpected token '${t.type}' in expression`);
+  }
+  function parseUnary() { if (peek().type === '!') { next(); return { kind: 'not', expr: parseUnary() }; } return parsePrimary(); }
+  function startsPrimary(t) { return ['FIELD', 'FIELDEXPR', 'NUMBER', 'STRING', 'REGEX', 'NR', 'NF', '(', '!'].includes(t.type); }
+  function parseConcat() { let node = parseUnary(); const parts = [node]; while (startsPrimary(peek())) parts.push(parseUnary()); return parts.length === 1 ? parts[0] : { kind: 'concat', parts }; }
+  function parseComparison() {
+    let left = parseConcat(); const t = peek();
+    if (['==', '!=', '~', '!~', '<', '<=', '>', '>='].includes(t.type)) { next(); const right = parseConcat(); return { kind: 'cmp', op: t.type, left, right }; }
+    return left;
+  }
+  function parseAnd() { let left = parseComparison(); while (peek().type === '&&') { next(); left = { kind: 'and', left, right: parseComparison() }; } return left; }
+  function parseOr() { let left = parseAnd(); while (peek().type === '||') { next(); left = { kind: 'or', left, right: parseAnd() }; } return left; }
+
+  let pattern = null, action = null;
+  if (peek().type !== '{') pattern = parseOr();
+  if (peek().type === '{') {
+    next();
+    if (peek().type === 'PRINT') {
+      next(); const args = [];
+      if (peek().type !== '}' && peek().type !== ';') { args.push(parseOr()); while (peek().type === ',') { next(); args.push(parseOr()); } }
+      action = { kind: 'print', args };
+    } else if (peek().type === '}') { action = { kind: 'noop' }; }
+    else throw new Error('Only `print` statements are supported inside { }');
+    if (peek().type === ';') next();
+    expect('}');
+  }
+  if (!pattern && !action) throw new Error('Empty awk program');
+  if (pattern && !action) action = { kind: 'print', args: [] };
+  if (!pattern && action) pattern = { kind: 'num', value: 1 };
+  return { pattern, action };
+}
+function awkLooksNumeric(s) { return /^-?\d+(\.\d+)?$/.test(s); }
+function awkToBool(v) {
+  if (typeof v === 'boolean') return v;
+  if (v === '') return false;
+  if (awkLooksNumeric(v)) return parseFloat(v) !== 0;
+  return true;
+}
+function evalAwkNode(node, ctx) {
+  switch (node.kind) {
+    case 'num': return String(node.value);
+    case 'str': return node.value;
+    case 'nr': return String(ctx.nr);
+    case 'nfval': return String(ctx.fields.length);
+    case 'field': {
+      let idx = node.index.kind === 'nf' ? ctx.fields.length : node.index.value;
+      if (idx === 0) return ctx.line;
+      return ctx.fields[idx - 1] !== undefined ? ctx.fields[idx - 1] : '';
+    }
+    case 'concat': return node.parts.map(p => evalAwkNode(p, ctx)).join('');
+    case 'not': return !awkToBool(evalAwkNode(node.expr, ctx));
+    case 'and': return awkToBool(evalAwkNode(node.left, ctx)) && awkToBool(evalAwkNode(node.right, ctx));
+    case 'or': return awkToBool(evalAwkNode(node.left, ctx)) || awkToBool(evalAwkNode(node.right, ctx));
+    case 'cmp': {
+      if (node.op === '~' || node.op === '!~') {
+        const left = evalAwkNode(node.left, ctx);
+        const re = node.right.kind === 'regexlit' ? new RegExp(node.right.value, node.right.flags || '') : new RegExp(String(evalAwkNode(node.right, ctx)));
+        const m = re.test(left);
+        return node.op === '~' ? m : !m;
+      }
+      const l = evalAwkNode(node.left, ctx), r = evalAwkNode(node.right, ctx);
+      const cmp = (awkLooksNumeric(l) && awkLooksNumeric(r)) ? (parseFloat(l) - parseFloat(r)) : (l < r ? -1 : l > r ? 1 : 0);
+      switch (node.op) { case '==': return cmp === 0; case '!=': return cmp !== 0; case '<': return cmp < 0; case '<=': return cmp <= 0; case '>': return cmp > 0; case '>=': return cmp >= 0; }
+    }
+  }
+  throw new Error('Unknown AST node: ' + node.kind);
+}
+function runAwk(programSrc, lines) {
+  const ast = parseAwkProgram(programSrc);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fields = line.trim().length ? line.trim().split(/\s+/) : [];
+    const ctx = { line, fields, nr: i + 1 };
+    if (awkToBool(evalAwkNode(ast.pattern, ctx))) {
+      if (ast.action.kind === 'noop') continue;
+      if (ast.action.args.length === 0) { out.push(line); continue; }
+      out.push(ast.action.args.map(a => evalAwkNode(a, ctx)).join(' '));
+    }
+  }
+  return out;
+}
+function applySort(lines, args) {
+  const flags = args.join(''); const numeric = flags.includes('n'); const reverse = flags.includes('r'); const unique = flags.includes('u');
+  let arr = lines.slice();
+  arr.sort((a, b) => {
+    if (numeric) { const na = parseFloat(a) || 0, nb = parseFloat(b) || 0; if (na !== nb) return na - nb; return a < b ? -1 : a > b ? 1 : 0; }
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+  if (reverse) arr.reverse();
+  if (unique) { const seen = new Set(); arr = arr.filter(l => (seen.has(l) ? false : (seen.add(l), true))); }
+  return arr;
+}
+function applyUniq(lines, args) {
+  const withCount = args.includes('-c'); const out = []; let i = 0;
+  while (i < lines.length) {
+    let j = i + 1; while (j < lines.length && lines[j] === lines[i]) j++;
+    out.push(withCount ? `${String(j - i).padStart(4)} ${lines[i]}` : lines[i]);
+    i = j;
+  }
+  return out;
+}
+function applyHeadTail(lines, args, fromEnd) {
+  let n = 10; const joined = args.join(' '); const m = /-n\s*(\d+)/.exec(joined) || /-(\d+)/.exec(joined);
+  if (m) n = parseInt(m[1], 10);
+  return fromEnd ? lines.slice(Math.max(0, lines.length - n)) : lines.slice(0, n);
+}
+function applyGrep(lines, args) {
+  const invert = args.includes('-v'); const icase = args.includes('-i');
+  const pattern = args.filter(a => a !== '-v' && a !== '-i').join(' ');
+  const re = new RegExp(pattern, icase ? 'i' : '');
+  return lines.filter(l => invert ? !re.test(l) : re.test(l));
+}
+function runQueryPipeline(input, rawLines) {
+  const stages = awkSplitTopLevel(input, '|');
+  if (!stages.length) throw new Error('Empty command');
+  let first = stages[0].trim();
+  if (/^awk\b/.test(first)) first = first.replace(/^awk\s*/, '');
+  first = awkStripQuotes(first);
+  let lines = runAwk(first, rawLines);
+  for (let s = 1; s < stages.length; s++) {
+    const argv = awkTokenizeArgs(stages[s]); const cmd = argv[0]; const args = argv.slice(1);
+    if (cmd === 'sort') lines = applySort(lines, args);
+    else if (cmd === 'uniq') lines = applyUniq(lines, args);
+    else if (cmd === 'head') lines = applyHeadTail(lines, args, false);
+    else if (cmd === 'tail') lines = applyHeadTail(lines, args, true);
+    else if (cmd === 'grep') lines = applyGrep(lines, args);
+    else if (cmd === 'wc') lines = [String(lines.length)];
+    else throw new Error(`Unsupported pipeline command '${cmd}' (supported: sort, uniq, head, tail, grep, wc)`);
+  }
+  return lines;
+}
+
 /* ---------- Upload wiring ---------- */
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const uploadStatus = document.getElementById('uploadStatus');
+let currentRawLines = [];
 
 function setStatus(msg, cls) {
   uploadStatus.textContent = msg;
   uploadStatus.className = cls || '';
+}
+function setQueryEnabled(enabled, badgeText) {
+  document.getElementById('queryInput').disabled = !enabled;
+  document.getElementById('runQueryBtn').disabled = !enabled;
+  document.getElementById('nlInput').disabled = !enabled;
+  document.getElementById('nlTranslateBtn').disabled = !enabled;
+  document.getElementById('queryBadge').textContent = badgeText;
+  document.getElementById('queryBadge').style.background = enabled ? 'color-mix(in srgb, var(--good) 20%, transparent)' : 'var(--gridline)';
+  document.getElementById('queryBadge').style.color = enabled ? 'var(--good)' : 'var(--text-muted)';
+  if (enabled) document.getElementById('queryInput').placeholder = "awk '$2==\"r\" {print $14}' | sort | uniq -c | sort -rn";
+}
+
+function analyzeText(combined, sourceLabel) {
+  const { lines, rLines, fLines } = parseLogText(combined);
+  currentRawLines = lines;
+  setQueryEnabled(lines.length > 0, `${lines.length} lines loaded`);
+  if (rLines.length === 0) {
+    setStatus(`No recognized Akamai r/f records found for the KPI dashboard, but ${lines.length} raw lines are loaded — the Custom Query box below will still work on them. ${sourceLabel}, 0 usable KPI lines.`, 'error');
+    return false;
+  }
+  const result = analyze(rLines, fLines);
+  renderAll(result);
+  setStatus(`${sourceLabel} — parsed ${rLines.length} client requests + ${fLines.length} origin legs.`, 'success');
+  return true;
 }
 
 async function handleFiles(fileList) {
@@ -715,14 +1044,7 @@ async function handleFiles(fileList) {
   try {
     const texts = await Promise.all(files.map(f => f.text()));
     const combined = texts.join('\n');
-    const { rLines, fLines } = parseLogText(combined);
-    if (rLines.length === 0) {
-      setStatus(`No recognized records found. This tool expects the Akamai edge/WAF delivery log format (space-delimited, record type 'r' or 'f' at field 2). Parsed ${files.length} file(s), 0 usable lines.`, 'error');
-      return;
-    }
-    const result = analyze(rLines, fLines);
-    renderAll(result);
-    setStatus(`Loaded ${files.map(f => f.name).join(', ')} — parsed ${rLines.length} client requests + ${fLines.length} origin legs.`, 'success');
+    analyzeText(combined, `Loaded ${files.map(f => f.name).join(', ')}`);
   } catch (err) {
     setStatus('Failed to parse file(s): ' + err.message, 'error');
   }
@@ -733,11 +1055,364 @@ fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 document.getElementById('resetBtn').addEventListener('click', () => {
   renderAll(SAMPLE_DATA);
   fileInput.value = '';
+  currentRawLines = [];
+  setQueryEnabled(false, 'no file loaded');
+  document.getElementById('queryInput').value = '';
+  document.getElementById('nlInput').value = '';
+  document.getElementById('nlExplain').textContent = '';
+  document.getElementById('queryOutput').textContent = '';
+  document.getElementById('queryStatus').textContent = '';
+  document.getElementById('downloadQueryBtn').style.display = 'none';
   setStatus('Showing sample data.');
 });
 ['dragenter', 'dragover'].forEach(evt => dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('dragover'); }));
 ['dragleave', 'drop'].forEach(evt => dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
 dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+
+const pasteInput = document.getElementById('pasteInput');
+document.getElementById('analyzePasteBtn').addEventListener('click', () => {
+  const text = pasteInput.value;
+  if (!text.trim()) {
+    setStatus('Paste box is empty — add some log lines first.', 'error');
+    return;
+  }
+  try {
+    analyzeText(text, 'Analyzed pasted lines');
+  } catch (err) {
+    setStatus('Failed to parse pasted text: ' + err.message, 'error');
+  }
+});
+document.getElementById('clearPasteBtn').addEventListener('click', () => {
+  pasteInput.value = '';
+  pasteInput.focus();
+});
+
+/* ---------- Plain-English -> AWK translator (pattern-based, no AI) ---------- */
+/* Deterministic keyword/regex heuristics only. Everything stays client-side,
+   nothing is sent anywhere. Field numbers below are the full documented
+   column layout for 'r' (client-facing) and 'f' (origin/forward leg)
+   records — 1-indexed, matching awk's own $N numbering directly. */
+const R_FIELDS = [
+  { idx: 1, label: 'Edge IP address', names: ['edge ip address', 'edge ip'] },
+  { idx: 3, label: 'Start time', names: ['start time'] },
+  { idx: 4, label: 'SSL overhead time', names: ['ssl overhead time', 'ssl overhead'] },
+  { idx: 5, label: 'Request end time', names: ['request end time', 'header reading time'] },
+  { idx: 6, label: 'Turnaround time', names: ['turnaround time', 'turn around time', 'latency', 'response time', 'duration'] },
+  { idx: 7, label: 'Object size', names: ['object size'] },
+  { idx: 8, label: 'Transfer time', names: ['transfer time'] },
+  { idx: 9, label: 'Content bytes served', names: ['content bytes served', 'content-length', 'content length'] },
+  { idx: 10, label: 'Total bytes served', names: ['total bytes served'] },
+  { idx: 11, label: 'Client IP', names: ['client ip', 'ip address', 'ip addresses', 'client', 'ips', 'ip'] },
+  { idx: 12, label: 'HTTP method', names: ['http method', 'method', 'verb'] },
+  { idx: 13, label: 'ARL', names: ['arl', 'url', 'uri', 'path', 'endpoint', 'resource'] },
+  { idx: 14, label: 'HTTP status code', names: ['http status code', 'status code', 'response code', 'status'] },
+  { idx: 15, label: 'Error', names: ['error reason', 'waf reason', 'error', 'reason'] },
+  { idx: 16, label: 'Object status information', names: ['object status information', 'object status'] },
+  { idx: 17, label: 'Content-Type', names: ['content-type', 'content type'] },
+  { idx: 18, label: 'Host header', names: ['host header', 'host', 'domain'] },
+  { idx: 19, label: 'Cookie', names: ['cookie'] },
+  { idx: 20, label: 'Referrer', names: ['referrer', 'referer'] },
+  { idx: 21, label: 'User-agent', names: ['user-agent', 'user agent', 'browser', 'ua'] },
+  { idx: 22, label: 'IMS', names: ['ims'] },
+  { idx: 23, label: 'SSL', names: ['ssl'] },
+  { idx: 24, label: 'Request number', names: ['request number'] },
+  { idx: 29, label: 'TCP statistics unique ID', names: ['tcp statistics unique id', 'tcp stats id'] },
+  { idx: 32, label: 'Request id', names: ['request id'] },
+  { idx: 33, label: 'Serial number and map', names: ['serial number and map', 'serial number'] },
+  { idx: 34, label: 'Request byte-range', names: ['request byte-range', 'byte range'] },
+  { idx: 35, label: 'Uncompressed length', names: ['uncompressed length'] },
+  { idx: 37, label: 'DCA/Edge Computing Information', names: ['dca/edge computing information', 'edge computing information', 'dca'] },
+  { idx: 38, label: 'X-Forwarded-For header', names: ['x-forwarded-for', 'x forwarded for', 'xff'] },
+  { idx: 40, label: 'Object max-age', names: ['object max-age', 'max-age', 'max age'] },
+  { idx: 49, label: 'Object Status 2', names: ['object status 2'] },
+  { idx: 53, label: 'Object Status 3', names: ['object status 3'] },
+  { idx: 57, label: 'Client request body size', names: ['client request body size', 'request body size'] },
+  { idx: 60, label: 'True client IP', names: ['true client ip', 'true-client-ip'] },
+  { idx: 62, label: 'Web Application Firewall Info', names: ['web application firewall info', 'waf info', 'waf'] },
+  { idx: 69, label: 'DNS Time (multi-domain config)', names: ['dns time taken for multi-domain config', 'dns time'] },
+  { idx: 70, label: 'Config hostname (multi-domain config)', names: ['config hostname for multi-domain config', 'config hostname'] },
+];
+const F_FIELDS = [
+  { idx: 1, label: 'Edge IP address', names: ['edge ip address', 'edge ip'] },
+  { idx: 3, label: 'Start time', names: ['start time'] },
+  { idx: 4, label: 'SSL overhead time', names: ['ssl overhead time', 'ssl overhead'] },
+  { idx: 5, label: 'Request end time', names: ['request end time'] },
+  { idx: 6, label: 'DNS lookup time', names: ['dns lookup time'] },
+  { idx: 7, label: 'Turnaround time', names: ['turnaround time', 'turn around time', 'latency', 'response time', 'duration'] },
+  { idx: 8, label: 'Transfer time', names: ['transfer time'] },
+  { idx: 9, label: 'Content bytes received', names: ['content bytes received'] },
+  { idx: 10, label: 'Total bytes received', names: ['total bytes received'] },
+  { idx: 11, label: 'Forward IP', names: ['forward ip'] },
+  { idx: 12, label: 'Client IP', names: ['client ip', 'ip address', 'ip addresses', 'client', 'ips', 'ip'] },
+  { idx: 13, label: 'HTTP method', names: ['http method', 'method', 'verb'] },
+  { idx: 14, label: 'ARL', names: ['arl', 'url', 'uri', 'path', 'endpoint', 'resource'] },
+  { idx: 15, label: 'HTTP status code', names: ['http status code', 'status code', 'response code', 'status'] },
+  { idx: 16, label: 'Content-Type', names: ['content-type', 'content type'] },
+  { idx: 17, label: 'IMS', names: ['ims'] },
+  { idx: 18, label: 'SSL', names: ['ssl'] },
+  { idx: 19, label: 'Object Status', names: ['object status information', 'object status'] },
+  { idx: 20, label: 'Request number', names: ['request number'] },
+  { idx: 21, label: 'Edgescape', names: ['edgescape'] },
+  { idx: 23, label: 'TCP statistics unique ID', names: ['tcp statistics unique id', 'tcp stats id'] },
+  { idx: 24, label: 'Forward hostname', names: ['forward hostname', 'upstream host', 'upstream', 'origin host'] },
+  { idx: 25, label: 'Ghost Request header size', names: ['ghost request header size'] },
+  { idx: 26, label: 'Ghost request size', names: ['ghost request size'] },
+  { idx: 27, label: 'SSL overhead bytes', names: ['ssl overhead bytes'] },
+  { idx: 28, label: 'Forward ARL', names: ['forward arl'] },
+  { idx: 29, label: 'Request id', names: ['request id'] },
+  { idx: 30, label: 'Error line message', names: ['error line message', 'error', 'reason'] },
+];
+const RECORD_KEYS = {
+  r: { type: 'r', status: 14, method: 12, ip: 11, host: 18, reason: 15, uri: 13, latency: 6, fields: R_FIELDS },
+  f: { type: 'f', status: 15, method: 13, ip: 12, host: 24, reason: 30, uri: 14, latency: 7, fields: F_FIELDS },
+};
+function nlEscapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function fieldEntry(K, idx, fallbackLabel) {
+  return K.fields.find(f => f.idx === idx) || { idx, label: fallbackLabel, names: [] };
+}
+// Find every (field, alias) occurrence actually present in the text, then
+// greedily keep the LONGEST ACTUAL MATCH at each text span (not the longest
+// possible alias a field happens to own) so e.g. "forward ips" resolves to
+// the dedicated Forward IP field instead of Client IP's generic "ips" alias
+// — a field with one long unrelated alias must never outrank a field whose
+// short alias is the one that truly matched. Overlapping shorter matches are
+// dropped; survivors are returned in left-to-right reading order.
+function matchFields(fieldsTable, text) {
+  const candidates = [];
+  for (const f of fieldsTable) {
+    for (const name of f.names) {
+      const re = new RegExp('\\b' + nlEscapeRegex(name) + 's?\\b', 'g');
+      let m;
+      while ((m = re.exec(text))) {
+        candidates.push({ f, start: m.index, end: m.index + m[0].length });
+        if (m[0].length === 0) re.lastIndex++;
+      }
+    }
+  }
+  candidates.sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.start - b.start);
+  const taken = [];
+  const selected = [];
+  for (const c of candidates) {
+    if (taken.some(([s, e]) => c.start < e && c.end > s)) continue;
+    taken.push([c.start, c.end]);
+    selected.push(c);
+  }
+  selected.sort((a, b) => a.start - b.start);
+  return selected.map(c => c.f);
+}
+// "forward ip" / "forward hostname" etc. only exist on f-line records, so
+// mentioning them should switch record type even without saying "f line"
+// explicitly. Quotes/apostrophes around r/f are stripped before this runs,
+// so "'f' line" and "f line" behave the same.
+const F_ONLY_TERMS = /\bforward ips?\b|\bforward hostnames?\b|\bforward arls?\b|\bdns lookup time\b|\bghost requests?\b|\bedgescapes?\b|\bssl overhead bytes\b/;
+function detectRecordType(q) {
+  // Plurals matter: "f lines", "origin legs", "forward legs" etc. must match
+  // just like the singular form.
+  if (/\br[\s-]?lines?\b|\bclient[\s-]?facing\b/.test(q)) return 'r';
+  if (/\bf[\s-]?lines?\b|\borigin legs?\b|\bforward legs?\b|\bupstreams?\b|\borigin requests?\b/.test(q)) return 'f';
+  if (F_ONLY_TERMS.test(q)) return 'f';
+  // "Object status information" is r-line's literal field name; bare
+  // "object status" (no "information") is f-line's literal field name — use
+  // that distinction to pick a record type when nothing else says which.
+  if (/\bobject status information\b/.test(q)) return 'r';
+  if (/\bobject status(es)?\b/.test(q)) return 'f';
+  return 'r';
+}
+
+function translateEnglish(text) {
+  // Strip quote marks before matching so quoted phrasing like "'f' line" or
+  // 'field "16"' is treated the same as the unquoted form.
+  const q = text.toLowerCase().trim().replace(/['"''""]/g, '');
+  if (!q) return null;
+  const filters = [];           // AND-ed boolean clauses (each a complete expr)
+  const statusAlternatives = []; // OR-ed among themselves, then AND-ed as one clause
+  const notes = [];
+
+  const recordType = detectRecordType(q);
+  const K = RECORD_KEYS[recordType];
+
+  // Extract IP first and mask it out before scanning for status-code-shaped
+  // numbers, so octets like the "143"/"244"/"168" in an IP never get read as
+  // HTTP status codes.
+  const ipMatch = text.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/);
+  let qMasked = ipMatch ? q.replace(ipMatch[0], ' '.repeat(ipMatch[0].length)) : q;
+
+  // Explicit "field 16" / "field #16" / "column 16" references take
+  // priority and are masked out before any other number-shaped heuristic
+  // (status codes, etc.) runs, and before the keyword matcher runs.
+  const explicitFields = [];
+  qMasked = qMasked.replace(/\b(?:field|column)\s*#?\s*(\d+)\b/g, (m, n) => {
+    explicitFields.push(fieldEntry(K, parseInt(n, 10), `field ${n}`));
+    return ' '.repeat(m.length);
+  });
+
+  const STATUS_CLASS = { '2xx': [200, 299], '3xx': [300, 399], '4xx': [400, 499], '5xx': [500, 599] };
+  for (const cls in STATUS_CLASS) {
+    if (qMasked.includes(cls)) {
+      const [lo, hi] = STATUS_CLASS[cls];
+      statusAlternatives.push(`($${K.status}>=${lo} && $${K.status}<=${hi})`);
+      notes.push(`status class ${cls}`);
+    }
+  }
+  const codeMatches = [...qMasked.matchAll(/\b([1-5]\d{2})s?\b/g)].map(m => m[1]);
+  const uniqueCodes = [...new Set(codeMatches)];
+  if (uniqueCodes.length) {
+    statusAlternatives.push(uniqueCodes.length === 1 ? `$${K.status}=="${uniqueCodes[0]}"` : '(' + uniqueCodes.map(c => `$${K.status}=="${c}"`).join(' || ') + ')');
+    notes.push(`status ${uniqueCodes.join(', ')}`);
+  }
+  if (/\bblock(ed)?\b|\bdenied\b|\bwaf\b/.test(qMasked) && !uniqueCodes.length) {
+    statusAlternatives.push(`$${K.status}=="403"`);
+    notes.push('WAF-blocked (403)');
+  }
+  if (/\brate.?limit|\bchalleng/.test(qMasked) && !uniqueCodes.includes('429')) {
+    statusAlternatives.push(`$${K.status}=="429"`);
+    notes.push('rate-limited/challenged (429)');
+  }
+  let mentionsErrorGeneric = false;
+  if (/\berror(s)?\b/.test(qMasked) && !statusAlternatives.length) {
+    filters.push(`$${K.reason}!="-"`);
+    notes.push('has an error/WAF reason');
+    mentionsErrorGeneric = true;
+  }
+  if (statusAlternatives.length) {
+    filters.push(statusAlternatives.length === 1 ? statusAlternatives[0] : '(' + statusAlternatives.join(' || ') + ')');
+  }
+
+  const methodMatch = qMasked.match(/\b(get|post|put|delete|head|patch)\b/);
+  if (methodMatch) { filters.push(`$${K.method}=="${methodMatch[1].toUpperCase()}"`); notes.push(`method ${methodMatch[1].toUpperCase()}`); }
+
+  if (ipMatch) { filters.push(`$${K.ip}=="${ipMatch[0]}"`); notes.push(`IP ${ipMatch[0]}`); }
+
+  const hostMatch = !ipMatch && text.match(/\b(?!\d+\.\d)[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+){2,}\b/);
+  if (hostMatch) { filters.push(`$${K.host}~/${nlEscapeRegex(hostMatch[0])}/`); notes.push(`host contains ${hostMatch[0]}`); }
+
+  if (/env file|\.env\b|secret scan|config file scan/.test(qMasked)) {
+    filters.push(`$${K.uri}~/\\.env|\\.git|next\\.config/`);
+    notes.push('env/config-file scan pattern');
+  }
+  if (/path traversal|directory traversal/.test(qMasked)) {
+    filters.push(`$${K.uri}~/\\.\\.|%2e%2e/`);
+    notes.push('path traversal pattern');
+  }
+  const containingMatch = qMasked.match(/contain(?:ing|s)?\s+["']?([a-z0-9_./-]+)["']?/);
+  if (containingMatch) { filters.push(`$${K.uri}~/${nlEscapeRegex(containingMatch[1])}/`); notes.push(`URI contains "${containingMatch[1]}"`); }
+
+  let fields = [...explicitFields, ...matchFields(K.fields, qMasked)];
+  const seenIdx = new Set();
+  fields = fields.filter(f => (seenIdx.has(f.idx) ? false : (seenIdx.add(f.idx), true)));
+  const hadExplicitFields = fields.length > 0;
+
+  const wantsTotalCount = /\bhow many\b|\btotal (number|count)\b/.test(qMasked) && !hadExplicitFields;
+  const topMatch = qMasked.match(/\btop\s+(\d+)\b/);
+  const slowest = /\bslowest\b|\bhighest latenc/.test(qMasked);
+
+  // Decide recognizability using ONLY what was explicitly found — must happen
+  // before any default-field fallback below, otherwise every query would
+  // "recognize" via the URI default and nothing could ever fall through.
+  const recognizedSomething = filters.length || hadExplicitFields || topMatch || wantsTotalCount || slowest ||
+    /\b(count|unique|distinct|top)\b/.test(qMasked);
+  if (!recognizedSomething) return null;
+
+  if (!hadExplicitFields && mentionsErrorGeneric) fields = [fieldEntry(K, K.status, 'status'), fieldEntry(K, K.reason, 'reason'), fieldEntry(K, K.uri, 'ARL/URI')];
+  if (!fields.length && !wantsTotalCount) fields = [fieldEntry(K, K.uri, 'ARL/URI')];
+  if (slowest) fields = [fieldEntry(K, K.latency, 'latency(ms)'), ...fields.filter(f => f.idx !== K.latency)];
+
+  let topN = topMatch ? parseInt(topMatch[1], 10) : null;
+  let mode;
+  if (wantsTotalCount) mode = 'totalcount';
+  else if (slowest) { mode = 'sortlatency'; if (!topN) topN = 10; }
+  else if (topMatch) mode = 'count';
+  else if (/\bcount\b|\btally\b|\bgroup(ed)? by\b|\bbreakdown\b/.test(qMasked)) mode = 'count';
+  else if (/\bunique\b|\bdistinct\b/.test(qMasked)) mode = 'unique';
+  else if (/\braw\b|\beach line\b|\bevery (line|request)\b|\ball lines\b/.test(qMasked)) mode = 'raw';
+  else mode = 'count';
+
+  const pattern = [`$2=="${recordType}"`, ...filters].join(' && ');
+  let command;
+  if (mode === 'totalcount') {
+    command = `awk '${pattern}' | wc -l`;
+  } else {
+    const printExpr = fields.map(f => `$${f.idx}`).join(' "\\t" ');
+    command = `awk '${pattern} {print ${printExpr}}'`;
+    if (mode === 'count') { command += ' | sort | uniq -c | sort -rn'; if (topN) command += ` | head -${topN}`; }
+    else if (mode === 'unique') command += ' | sort -u';
+    else if (mode === 'sortlatency') { command += ' | sort -rn'; if (topN) command += ` | head -${topN}`; }
+  }
+
+  const fieldLabel = wantsTotalCount ? 'total matching lines' : fields.map(f => `${f.label} ($${f.idx})`).join(' + ');
+  const recordLabel = recordType === 'f' ? "[f-line / origin-forward leg]" : "[r-line / client-facing]";
+  const explanation = `${recordLabel} Showing ${fieldLabel}` + (notes.length ? `, filtered by: ${notes.join('; ')}` : '') + ` · mode: ${mode}` + (topN ? ` (top ${topN})` : '');
+  return { command, explanation };
+}
+
+/* ---------- Custom query wiring ---------- */
+let lastQueryOutput = [];
+function runCustomQuery() {
+  const input = document.getElementById('queryInput').value.trim();
+  const statusEl = document.getElementById('queryStatus');
+  const outEl = document.getElementById('queryOutput');
+  const dlBtn = document.getElementById('downloadQueryBtn');
+  if (!input) { statusEl.textContent = ''; outEl.textContent = ''; dlBtn.style.display = 'none'; return; }
+  if (!currentRawLines.length) { statusEl.textContent = 'Upload a log file first.'; statusEl.style.color = 'var(--critical)'; return; }
+  try {
+    const out = runQueryPipeline(input, currentRawLines);
+    lastQueryOutput = out;
+    const CAP = 5000;
+    outEl.textContent = out.slice(0, CAP).join('\n') || '(no matching lines)';
+    statusEl.style.color = 'var(--text-muted)';
+    statusEl.textContent = out.length > CAP ? `${out.length} output lines (showing first ${CAP} — use Download for the rest)` : `${out.length} output line(s)`;
+    dlBtn.style.display = out.length ? 'inline-flex' : 'none';
+  } catch (err) {
+    lastQueryOutput = [];
+    outEl.textContent = '';
+    statusEl.style.color = 'var(--critical)';
+    statusEl.textContent = 'Error: ' + err.message;
+    dlBtn.style.display = 'none';
+  }
+}
+document.getElementById('runQueryBtn').addEventListener('click', runCustomQuery);
+function runNlTranslate() {
+  const nlInput = document.getElementById('nlInput');
+  const explainEl = document.getElementById('nlExplain');
+  if (nlInput.disabled) return;
+  const text = nlInput.value.trim();
+  if (!text) { explainEl.textContent = ''; return; }
+  const result = translateEnglish(text);
+  if (!result) {
+    explainEl.style.color = 'var(--critical)';
+    explainEl.textContent = "Couldn't confidently interpret that — try mentioning a field (ARL/URI, IP, status, host, method, latency) and optionally a filter (a status code, GET, blocked, an IP, a host). Or write AWK directly in Advanced below.";
+    return;
+  }
+  document.getElementById('queryInput').value = result.command;
+  explainEl.style.color = 'var(--text-muted)';
+  explainEl.textContent = `Interpreted as: ${result.explanation} — ran: ${result.command}`;
+  runCustomQuery();
+}
+document.getElementById('nlTranslateBtn').addEventListener('click', runNlTranslate);
+document.getElementById('nlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') runNlTranslate(); });
+document.getElementById('clearQueryBtn').addEventListener('click', () => {
+  document.getElementById('queryInput').value = '';
+  document.getElementById('queryOutput').textContent = '';
+  document.getElementById('queryStatus').textContent = '';
+  document.getElementById('downloadQueryBtn').style.display = 'none';
+});
+document.getElementById('queryInput').addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') runCustomQuery();
+});
+document.querySelectorAll('[data-example]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (document.getElementById('queryInput').disabled) return;
+    document.getElementById('queryInput').value = btn.dataset.example;
+    runCustomQuery();
+  });
+});
+document.getElementById('downloadQueryBtn').addEventListener('click', () => {
+  const blob = new Blob([lastQueryOutput.join('\n') + '\n'], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'query-output.txt'; a.click();
+  URL.revokeObjectURL(url);
+});
 
 /* ---------- Initial render ---------- */
 renderAll(SAMPLE_DATA);
