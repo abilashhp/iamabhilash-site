@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Edge Log Analyzer — Abhilash HP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   :root {
@@ -66,7 +69,7 @@
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--page-plane);
     color: var(--text-primary);
     padding: 24px;
@@ -327,12 +330,6 @@
   </div>
 
   <div class="card">
-    <h2>Client Reputation Signals</h2>
-    <p class="hint" id="reputationHint">Akamai's own bot/threat classification (field 70 "rep2="), not a User-Agent guess — higher score = stronger signal</p>
-    <div class="chart-box"><canvas id="reputationChart"></canvas></div>
-  </div>
-
-  <div class="card">
     <h2>Top 10 Slowest Endpoints (p95 edge time, ms)</h2>
     <p class="hint">Normalized paths (IDs/tokens collapsed); minimum 2 samples per endpoint</p>
     <div class="chart-box tall"><canvas id="slowChart"></canvas></div>
@@ -494,12 +491,6 @@ const SAMPLE_DATA = {
       {signal: "REP_192115", count: 6}
     ]
   },
-  topReputation: [
-    {context: "SCANTL", count: 103, avgScore: 9.1},
-    {context: "WEBATCK", count: 61, avgScore: 8.4},
-    {context: "SHARED", count: 48, avgScore: 0},
-    {context: "NOSCR", count: 347, avgScore: 0}
-  ],
   coverageGap: { seconds: 2820, pctOfWindow: 8.0, startStr: "2026-09-17 13:42:07" },
   statusBuckets: { "2xx": 290, "3xx": 161, "4xx": 108, "5xx": 0 },
   statusHint: "559 client-facing requests",
@@ -593,30 +584,6 @@ function topCounterEntry(counter) {
   let best = null;
   for (const [k, v] of counter.entries()) if (!best || v > best[1]) best = [k, v];
   return best;
-}
-// Several of the richest security fields (client reputation, bot manager,
-// rate-limit state) live inside one big multi-purpose name/value field
-// (semicolon-joined "key=value" pairs within a single space-delimited
-// token), and its exact position can drift a field or two across Ghost log
-// versions. Check the commonly-observed index first, then fall back to a
-// full scan so this stays correct even if that drifts.
-function extractNamedValue(fields, key, likelyIdx) {
-  const pluck = (tok) => {
-    const i = tok.indexOf(key);
-    if (i === -1) return null;
-    const rest = tok.slice(i + key.length);
-    const end = rest.indexOf(';');
-    return end === -1 ? rest : rest.slice(0, end);
-  };
-  if (likelyIdx != null && fields[likelyIdx]) {
-    const v = pluck(fields[likelyIdx]);
-    if (v !== null) return v;
-  }
-  for (const tok of fields) {
-    const v = pluck(tok);
-    if (v !== null) return v;
-  }
-  return null;
 }
 function topNEntries(counter, n) {
   return [...counter.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
@@ -753,11 +720,6 @@ function analyze(rLines, fLines) {
   const wafTokenCounts = new Map();
   let wafHitRequests = 0;
   let totalBytesServed = 0;
-  // Client reputation context (e.g. SCANTL = scanner, WEBATCK = web
-  // attacker) extracted from the "rep2=" sub-field — this is Akamai's own
-  // bot/threat classification, distinct from (and more reliable than)
-  // regexing the User-Agent string.
-  const reputationCounts = new Map(); // context -> { count, scoreSum }
   let trueClientIpMismatches = 0;
   for (const f of rLines) {
     statusCounts.set(f[13], (statusCounts.get(f[13]) || 0) + 1);
@@ -783,15 +745,6 @@ function analyze(rLines, fLines) {
       wafTokenCounts.set(ruleName, (wafTokenCounts.get(ruleName) || 0) + 1);
     }
 
-    const rep2 = extractNamedValue(f, 'rep2=', 70);
-    if (rep2) {
-      for (const m of rep2.matchAll(/ctx\/([A-Za-z0-9]+)#(\d+)/g)) {
-        const ctx = m[1], score = parseInt(m[2], 10);
-        if (!reputationCounts.has(ctx)) reputationCounts.set(ctx, { count: 0, scoreSum: 0 });
-        const r = reputationCounts.get(ctx);
-        r.count++; r.scoreSum += score;
-      }
-    }
 
     // Field 60: True Client IP (first public IP in X-Forwarded-For, or the
     // peer socket IP if none). When it differs from field 11 (Client IP,
@@ -951,12 +904,6 @@ function analyze(rLines, fLines) {
     topSignals: topNEntries(wafTokenCounts, 8).map(([signal, count]) => ({ signal, count }))
   };
 
-  // client reputation (Akamai's own bot/threat classification, not just UA regex)
-  const topReputation = [...reputationCounts.entries()]
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 8)
-    .map(([context, r]) => ({ context, count: r.count, avgScore: +(r.scoreSum / r.count).toFixed(1) }));
-
   // log-coverage gap detection: the largest silence between two consecutive
   // requests. A gap that's a big fraction of the total window can mean the
   // "quiet period" around an incident is actually a logging hole, not real
@@ -1016,7 +963,6 @@ function analyze(rLines, fLines) {
     bandwidth,
     contentType,
     waf,
-    topReputation,
     coverageGap,
     statusBuckets: { '2xx': statusBuckets['2xx'], '3xx': statusBuckets['3xx'], '4xx': statusBuckets['4xx'], '5xx': statusBuckets['5xx'] },
     statusHint: `${total} client-facing requests`,
@@ -1121,16 +1067,6 @@ const wafChart = new Chart(document.getElementById('wafChart'), {
     plugins: { legend: { display: false }, tooltip: { callbacks: { title: (items) => wafFullLabels[items[0].dataIndex] || items[0].label } } },
     scales: { x: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, precision: 0 } }, y: { grid: { display: false }, ticks: { color: tickColor } } } }
 });
-const reputationChart = new Chart(document.getElementById('reputationChart'), {
-  type: 'bar',
-  data: { labels: [], datasets: [{ label: 'Occurrences', data: [], backgroundColor: CATEGORICAL_PALETTE, borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 }, borderSkipped: false, maxBarThickness: 48 }] },
-  options: { responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false },
-      tooltip: { callbacks: { afterLabel: (ctx) => `avg score: ${reputationAvgScores[ctx.dataIndex] ?? '-'}` } } },
-    scales: { x: { grid: { display: false }, ticks: { color: tickColor, autoSkip: false, maxRotation: 20 } }, y: { beginAtZero: true, grid: gridOpt, ticks: { color: tickColor, precision: 0 } } } }
-});
-let reputationAvgScores = [];
-
 function statusPillClass(s) {
   const n = parseInt(s, 10);
   if (n >= 200 && n < 300) return 'pill s2';
@@ -1234,14 +1170,6 @@ function renderAll(d) {
   wafChart.data.labels = d.waf.topSignals.map(x => x.signal.length > 28 ? x.signal.slice(0, 28) + '…' : x.signal);
   wafChart.data.datasets[0].data = d.waf.topSignals.map(x => x.count);
   wafChart.update();
-
-  reputationAvgScores = d.topReputation.map(x => x.avgScore);
-  reputationChart.data.labels = d.topReputation.map(x => x.context);
-  reputationChart.data.datasets[0].data = d.topReputation.map(x => x.count);
-  reputationChart.update();
-  document.getElementById('reputationHint').textContent = d.topReputation.length
-    ? 'Akamai\'s own bot/threat classification (field 70 "rep2="), not a User-Agent guess — higher score = stronger signal'
-    : 'No client reputation data found in this file (the "rep2=" sub-field was absent or empty on every request)';
 
   slowChart.data.labels = d.topSlow.map(x => `${x.endpoint} (n=${x.count})`);
   slowChart.data.datasets[0].data = d.topSlow.map(x => x.p95);
