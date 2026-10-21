@@ -164,6 +164,8 @@
     background: var(--page-plane); color: var(--text-primary); font-size: 13px;
   }
   .foot-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  .geo-link { color: var(--series-1); font-size: 12px; cursor: pointer; text-decoration: underline; }
+  .geo-link:hover { opacity: 0.75; }
   details summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
   code { font-size: 12px; background: color-mix(in srgb, var(--text-muted) 15%, transparent); padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -271,6 +273,44 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>Turnaround Time Breakdown</h2>
+    <p class="hint" id="turnaroundHint">Client↔Edge (r-line turnaround time) vs. Edge↔Origin (f-line turnaround time) — isolates whether a slowdown is Akamai-side or origin-side.</p>
+    <div class="grid-2">
+      <div>
+        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px;">Client ↔ Edge</div>
+        <div style="display:flex; gap:28px;">
+          <div class="kpi"><div class="label">p50</div><div class="value" id="ceP50" style="font-size:20px;">-</div></div>
+          <div class="kpi"><div class="label">p95</div><div class="value" id="ceP95" style="font-size:20px;">-</div></div>
+          <div class="kpi"><div class="label">Overall avg</div><div class="value" id="ceAvg" style="font-size:20px;">-</div></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px;">Edge ↔ Origin</div>
+        <div style="display:flex; gap:28px;">
+          <div class="kpi"><div class="label">p50</div><div class="value" id="eoP50" style="font-size:20px;">-</div></div>
+          <div class="kpi"><div class="label">p95</div><div class="value" id="eoP95" style="font-size:20px;">-</div></div>
+          <div class="kpi"><div class="label">Overall avg</div><div class="value" id="eoAvg" style="font-size:20px;">-</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Infrastructure Locations</h2>
+    <p class="hint">Edge and origin IPs found in this file, looked up via a third-party geolocation API (geojs.io) — the only automatic lookup this tool performs; client IPs are opt-in per row in the table below.</p>
+    <div class="grid-2">
+      <div>
+        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">Edge Server(s)</div>
+        <div id="edgeLocationList" style="font-size:13px; line-height:1.8;">-</div>
+      </div>
+      <div>
+        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">Origin Server(s)</div>
+        <div id="originLocationList" style="font-size:13px; line-height:1.8;">-</div>
+      </div>
+    </div>
+  </div>
+
   <div class="grid-2">
     <div class="card">
       <h2>Requests Per Second — over time</h2>
@@ -337,7 +377,7 @@
 
   <div class="card">
     <h2>Suspicious Client IPs</h2>
-    <p class="hint">Top request sources, ranked by volume — click column headers to sort</p>
+    <p class="hint">Top request sources, ranked by volume — click column headers to sort. "Look up" under Location sends that one IP to a third-party geolocation API (geojs.io) — nothing else on this page does that.</p>
     <div class="filter-row">
       <input id="ipFilter" type="text" placeholder="Filter by IP, status, WAF reason, or user-agent…">
     </div>
@@ -352,6 +392,7 @@
           <th data-key="waf_reason">WAF Reason</th>
           <th data-key="hosts"># Hosts</th>
           <th data-key="ua_sample">Sample User-Agent</th>
+          <th>Location</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -391,6 +432,8 @@
         <button class="btn" data-example="awk '$2==&quot;r&quot; && $15!=&quot;-&quot; {print $14 &quot;\t&quot; $15 &quot;\t&quot; $13}' | sort | uniq -c | sort -rn">errors + URI</button>
         <button class="btn" data-example="awk '$2==&quot;r&quot; && $12==&quot;GET&quot; {print $11}' | sort | uniq -c | sort -rn | head -10">top GET client IPs</button>
         <button class="btn" data-example="awk '$2==&quot;r&quot; && $14==&quot;403&quot; {print $16}' | sort | uniq -c | sort -rn">403s → object status info</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $13}' | sort | uniq -c | sort -rn | head -5">top 5 endpoints</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $21}' | sort | uniq -c | sort -rn | head -5">top 5 user agents</button>
       </div>
       <textarea id="queryInput" disabled rows="3" placeholder="Upload a log file above to enable custom queries…"
         style="width:100%; font-family:ui-monospace,monospace; font-size:12.5px; padding:10px; border-radius:7px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); resize:vertical;"></textarea>
@@ -449,6 +492,12 @@ const SAMPLE_DATA = {
     peakRps: "0.9",
     blocks: 106, blocksSub: "103×403 + 3×429 (19.0%)"
   },
+  turnaround: {
+    clientEdge: { p50: 0, p95: 165, avg: 41 },
+    edgeOrigin: { p50: 12, p95: 203, avg: 58 },
+    hasOriginData: true
+  },
+  infra: { edgeIps: [], originIps: [] },
   timeline: {
     labels: ["10:12","10:31","10:51","11:10","11:30","11:49","12:09","12:29","12:48","13:08","13:27","13:47","14:06","14:26","14:46","15:05","15:25","15:44","16:04","16:23","16:43","17:03","17:22","17:42","18:01","18:21","18:40","19:00","19:20","19:39"],
     rps: [0.0085,0.006,0.0264,0.0034,0.0332,0.0051,0.0077,0.0043,0.0068,0.0034,0.0409,0.0051,0.0017,0.0221,0.0204,0.0502,0.0179,0.0153,0.0043,0.0102,0.0034,0.029,0.0324,0.0094,0.0187,0.0375,0.0179,0.006,0.0026,0.0264],
@@ -701,12 +750,23 @@ function analyze(rLines, fLines) {
   const t0 = ts[0], t1 = ts[ts.length - 1];
   const duration = Math.max(t1 - t0, 0.001);
 
-  // latency
+  // latency: r-line turnaround time (field 6) is the client<->edge leg —
+  // how long the edge took to answer the client, start to finish.
   const lat = rLines.map(f => fnum(f[5])).sort((a, b) => a - b);
   const latency = {
     avg: lat.reduce((a, b) => a + b, 0) / (lat.length || 1),
     p50: pct(lat, 0.5), p90: pct(lat, 0.9), p95: pct(lat, 0.95), p99: pct(lat, 0.99),
     max: lat.length ? lat[lat.length - 1] : 0
+  };
+
+  // origin latency: f-line turnaround time (field 7) is the edge<->origin
+  // leg — how long the origin took to answer the edge. Comparing this
+  // against the client<->edge leg above isolates whether a slowdown is
+  // Akamai-side (cache/WAF/TLS overhead) or origin-side.
+  const originLat = fLines.map(f => fnum(f[6])).sort((a, b) => a - b);
+  const originLatency = {
+    avg: originLat.reduce((a, b) => a + b, 0) / (originLat.length || 1),
+    p50: pct(originLat, 0.5), p95: pct(originLat, 0.95),
   };
 
   // status
@@ -869,6 +929,15 @@ function analyze(rLines, fLines) {
     fUpstream.set(f[23], (fUpstream.get(f[23]) || 0) + 1);
   }
 
+  // Edge IP (field 1, same position on r- and f-lines) and Forward/Origin
+  // IP (field 11 on f-lines) — usually just a handful of unique values per
+  // file, unlike client IPs, so these are safe to geolocate automatically.
+  const edgeIpSet = new Set();
+  for (const f of rLines) if (f[0] && f[0] !== '-') edgeIpSet.add(f[0]);
+  for (const f of fLines) if (f[0] && f[0] !== '-') edgeIpSet.add(f[0]);
+  const originIpSet = new Set();
+  for (const f of fLines) if (f[10] && f[10] !== '-') originIpSet.add(f[10]);
+
   const total = rLines.length;
   const count404 = statusCounts.get('404') || 0;
   const count5xx = statusBuckets['5xx'];
@@ -958,6 +1027,12 @@ function analyze(rLines, fLines) {
       blocks: blockedTotal,
       blocksSub: `${blocked403}×403 + ${blocked429}×429 (${total ? (blockedTotal / total * 100).toFixed(1) : '0.0'}%)`
     },
+    turnaround: {
+      clientEdge: { p50: Math.round(latency.p50), p95: Math.round(latency.p95), avg: Math.round(latency.avg) },
+      edgeOrigin: { p50: Math.round(originLatency.p50), p95: Math.round(originLatency.p95), avg: Math.round(originLatency.avg) },
+      hasOriginData: fLines.length > 0
+    },
+    infra: { edgeIps: [...edgeIpSet], originIps: [...originIpSet] },
     timeline: { labels: binLabels, rps: binRps, p95: binP95, status2xx: binStatus['2xx'], status3xx: binStatus['3xx'], status4xx: binStatus['4xx'], status5xx: binStatus['5xx'] },
     cache,
     bandwidth,
@@ -1088,12 +1163,28 @@ function renderTable() {
       <td>${r.waf_reason}</td>
       <td>${r.hosts}</td>
       <td style="color:var(--text-muted); font-size:12px;">${r.ua_sample}</td>
+      <td style="font-size:12px;">${ipLocationCellHtml(r.ip)}</td>
     </tr>
   `).join('');
 }
+function ipLocationCellHtml(ip) {
+  const cached = geoCache.get(ip);
+  if (!cached) return `<a class="geo-link" data-geo-ip="${ip}">Look up</a>`;
+  if (typeof cached.then === 'function') return `<span style="color:var(--text-muted);">looking up…</span>`;
+  return `<span style="${cached.status === 'error' ? 'color:var(--text-muted);' : ''}">${geoResultText(cached)}</span>`;
+}
+document.querySelector('#ipTable tbody').addEventListener('click', async (e) => {
+  const link = e.target.closest('[data-geo-ip]');
+  if (!link) return;
+  const ip = link.dataset.geoIp;
+  link.outerHTML = `<span style="color:var(--text-muted);">looking up…</span>`;
+  await lookupIpLocation(ip);
+  renderTable();
+});
 document.querySelectorAll('#ipTable th').forEach(th => {
   th.addEventListener('click', () => {
     const key = th.dataset.key;
+    if (!key) return;
     sortDir = (sortKey === key) ? -sortDir : -1;
     sortKey = key;
     renderTable();
@@ -1130,6 +1221,22 @@ function renderAll(d) {
   document.getElementById('kpiBytesServed').textContent = d.bandwidth.totalBytesLabel;
   document.getElementById('kpiWafCoverage').textContent = d.waf.coverage;
   document.getElementById('kpiWafCoverageSub').textContent = d.waf.coverageSub;
+
+  document.getElementById('ceP50').textContent = d.turnaround.clientEdge.p50 + 'ms';
+  document.getElementById('ceP95').textContent = d.turnaround.clientEdge.p95 + 'ms';
+  document.getElementById('ceAvg').textContent = d.turnaround.clientEdge.avg + 'ms';
+  if (d.turnaround.hasOriginData) {
+    document.getElementById('eoP50').textContent = d.turnaround.edgeOrigin.p50 + 'ms';
+    document.getElementById('eoP95').textContent = d.turnaround.edgeOrigin.p95 + 'ms';
+    document.getElementById('eoAvg').textContent = d.turnaround.edgeOrigin.avg + 'ms';
+    document.getElementById('turnaroundHint').textContent = 'Client↔Edge (r-line turnaround time) vs. Edge↔Origin (f-line turnaround time) — isolates whether a slowdown is Akamai-side or origin-side.';
+  } else {
+    document.getElementById('eoP50').textContent = '-';
+    document.getElementById('eoP95').textContent = '-';
+    document.getElementById('eoAvg').textContent = '-';
+    document.getElementById('turnaroundHint').textContent = 'Client↔Edge (r-line turnaround time) shown below. No origin/forward (f-type) records in this file, so Edge↔Origin can\'t be computed.';
+  }
+  renderInfraLocations(d.infra);
 
   rpsChart.data.labels = d.timeline.labels;
   rpsChart.data.datasets[0].data = d.timeline.rps;
@@ -1413,6 +1520,102 @@ function runQueryPipeline(input, rawLines) {
     else throw new Error(`Unsupported pipeline command '${cmd}' (supported: sort, uniq, head, tail, grep, wc)`);
   }
   return lines;
+}
+
+/* ---------- IP geolocation (geojs.io, no key, CORS-open) ----------
+   This is the one thing in this tool that sends data to a third party.
+   Edge/Origin IPs are looked up automatically since a file usually only has
+   a handful of distinct values; client IPs are looked up on demand (one
+   click per row) so a file with thousands of unique clients doesn't fire
+   thousands of requests or blow through the API's free-tier rate limit. */
+const geoCache = new Map(); // ip -> {status:'ok', text, org} | {status:'error', text} | Promise of same
+function isPrivateOrPlaceholderIp(ip) {
+  if (!ip || ip === '-') return true;
+  if (/^10\./.test(ip)) return true;
+  if (/^192\.168\./.test(ip)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return true;
+  if (/^127\./.test(ip)) return true;
+  if (/^169\.254\./.test(ip)) return true;
+  if (ip === '::1' || /^f[cd][0-9a-f]{2}:/i.test(ip)) return true;
+  return false;
+}
+function geoSleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+// Firing every lookup at once (Promise.all) tripped geojs.io's free-tier
+// rate limit (HTTP 429) even for single-digit IP counts. Funnel every
+// request — auto edge/origin lookups and manual per-row clicks alike —
+// through one queue so they always go out one at a time with a gap.
+let geoQueueTail = Promise.resolve();
+function queueGeoRequest(task) {
+  const run = geoQueueTail.then(async () => {
+    const result = await task();
+    await geoSleep(400);
+    return result;
+  });
+  geoQueueTail = run.catch(() => {}); // don't let one failure stall the queue
+  return run;
+}
+
+async function fetchIpLocation(ip, attempt = 0) {
+  try {
+    const res = await fetch(`https://get.geojs.io/v1/ip/geo/${encodeURIComponent(ip)}.json`);
+    if (res.status === 429 && attempt < 2) {
+      await geoSleep(1500 * (attempt + 1));
+      return fetchIpLocation(ip, attempt + 1);
+    }
+    if (!res.ok) return { status: 'error', text: `lookup failed (HTTP ${res.status})` };
+    const data = await res.json();
+    if (!data || !data.country) return { status: 'error', text: 'lookup failed: no data returned' };
+    const parts = [data.city, data.region, data.country].filter(Boolean);
+    const org = (data.organization_name && data.organization_name !== 'Unknown') ? data.organization_name : null;
+    return { status: 'ok', text: parts.join(', ') || data.country || 'unknown', org };
+  } catch (err) {
+    console.error('IP geolocation lookup failed for', ip, err);
+    return { status: 'error', text: 'lookup failed: ' + (err && err.message ? err.message : 'network error') };
+  }
+}
+
+async function lookupIpLocation(ip) {
+  if (geoCache.has(ip)) return geoCache.get(ip);
+  if (isPrivateOrPlaceholderIp(ip)) {
+    const result = { status: 'error', text: 'private/internal IP' };
+    geoCache.set(ip, result);
+    return result;
+  }
+  const pending = queueGeoRequest(() => fetchIpLocation(ip));
+  geoCache.set(ip, pending);
+  const resolved = await pending;
+  geoCache.set(ip, resolved);
+  return resolved;
+}
+function geoResultText(geo) {
+  if (!geo) return 'looking up…';
+  if (geo.status === 'ok') return geo.text + (geo.org ? ` (${geo.org})` : '');
+  return geo.text;
+}
+let infraLocationRenderToken = 0;
+async function renderLocationList(el, ips, emptyMsg, myToken) {
+  if (!ips.length) { el.textContent = emptyMsg; return; }
+  const state = new Map(ips.map((ip) => [ip, geoCache.get(ip) || null]));
+  const paint = () => {
+    if (infraLocationRenderToken !== myToken) return;
+    el.innerHTML = ips.map((ip) => `<div>${ip} — ${geoResultText(state.get(ip))}</div>`).join('');
+  };
+  paint();
+  await Promise.all(ips.map(async (ip) => {
+    const geo = await lookupIpLocation(ip);
+    state.set(ip, geo);
+    paint();
+  }));
+}
+async function renderInfraLocations(infra) {
+  const myToken = ++infraLocationRenderToken; // guards against a stale async response landing after a newer file is loaded
+  const edgeEl = document.getElementById('edgeLocationList');
+  const originEl = document.getElementById('originLocationList');
+  await Promise.all([
+    renderLocationList(edgeEl, infra.edgeIps, 'No edge IP found in this dataset.', myToken),
+    renderLocationList(originEl, infra.originIps, 'No origin/forward IP found in this dataset (requires f-type origin-leg records).', myToken),
+  ]);
 }
 
 /* ---------- Upload wiring ---------- */
