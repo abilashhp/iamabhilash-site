@@ -122,12 +122,6 @@
     background: var(--page-plane); color: var(--text-primary);
   }
   .paste-actions { display: flex; gap: 8px; }
-  .pull-logs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
-  .pull-logs-grid label { font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; }
-  .pull-logs-grid input, .pull-logs-grid select {
-    padding: 7px 9px; border-radius: 6px; border: 1px solid var(--border);
-    background: var(--page-plane); color: var(--text-primary); font-size: 13px;
-  }
 
   .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
   @media (max-width: 1100px) { .kpi-row { grid-template-columns: repeat(3, 1fr); } }
@@ -202,56 +196,6 @@
         <div class="paste-actions">
           <button class="btn primary" id="analyzePasteBtn">Analyze pasted lines</button>
           <button class="btn" id="clearPasteBtn">Clear</button>
-        </div>
-      </div>
-    </details>
-
-    <details class="paste-row">
-      <summary>…or pull logs directly from Akamai Edge Diagnostics</summary>
-      <div id="pullLogsBox" style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
-        <div class="hint" style="margin:0;">Requires a small server-side proxy (see <code>README-server.md</code>) that holds your Akamai EdgeGrid credentials and calls the <a href="https://techdocs.akamai.com/edge-diagnostics/reference/post-grep" target="_blank" rel="noopener">grep API</a> on your behalf — your browser only ever talks to this same site. WAF rule names and reputation signals aren't included in that API's response, so those two widgets will show no data for pulled logs.</div>
-        <div class="pull-logs-grid">
-          <label>Edge IP *
-            <input type="text" id="pullEdgeIp" placeholder="e.g. 23.1.2.3">
-          </label>
-          <label>Log type
-            <select id="pullLogType">
-              <option value="BOTH">Both (r + f)</option>
-              <option value="r">Client-facing (r) only</option>
-              <option value="f">Origin/forward (f) only</option>
-            </select>
-          </label>
-          <label>Start *
-            <input type="datetime-local" id="pullStart" step="1">
-          </label>
-          <label>End *
-            <input type="datetime-local" id="pullEnd" step="1">
-          </label>
-          <label>Hostnames
-            <input type="text" id="pullHostnames" placeholder="comma-separated">
-          </label>
-          <label>CP codes
-            <input type="text" id="pullCpCodes" placeholder="comma-separated">
-          </label>
-          <label>Client IPs
-            <input type="text" id="pullClientIps" placeholder="comma-separated">
-          </label>
-          <label>User agents
-            <input type="text" id="pullUserAgents" placeholder="comma-separated">
-          </label>
-          <label>ARL contains
-            <input type="text" id="pullArlContains" placeholder="e.g. /checkout/">
-          </label>
-          <label>HTTP status codes
-            <input type="text" id="pullStatusCodes" placeholder="comma-separated, e.g. 403,429">
-          </label>
-          <label>API key *
-            <input type="password" id="pullApiKey" placeholder="shared secret for this tool's proxy">
-          </label>
-        </div>
-        <div class="paste-actions">
-          <button class="btn primary" id="pullLogsBtn">Pull logs</button>
-          <span id="pullLogsStatus" style="font-size:12px; color:var(--text-muted); align-self:center;"></span>
         </div>
       </div>
     </details>
@@ -1720,92 +1664,6 @@ document.getElementById('analyzePasteBtn').addEventListener('click', () => {
 document.getElementById('clearPasteBtn').addEventListener('click', () => {
   pasteInput.value = '';
   pasteInput.focus();
-});
-
-/* ---------- Pull logs from Akamai (via local proxy) ----------
-   Credentials for the grep API itself never touch the browser — this just
-   calls our own same-origin /api/pull-logs endpoint, which signs the real
-   Akamai request server-side. The only secret kept client-side is the
-   shared API key gating access to that endpoint, stored in localStorage
-   only (never baked into this static file). */
-const PULL_LOGS_API_KEY_STORAGE_KEY = 'edgeLogAnalyzer.pullLogsApiKey';
-const pullApiKeyInput = document.getElementById('pullApiKey');
-pullApiKeyInput.value = localStorage.getItem(PULL_LOGS_API_KEY_STORAGE_KEY) || '';
-pullApiKeyInput.addEventListener('change', () => {
-  localStorage.setItem(PULL_LOGS_API_KEY_STORAGE_KEY, pullApiKeyInput.value);
-});
-
-function splitCsv(v) {
-  return v.split(',').map(s => s.trim()).filter(Boolean);
-}
-function localInputValueToIso(v) {
-  const t = new Date(v);
-  return v && Number.isFinite(t.getTime()) ? t.toISOString() : null;
-}
-
-document.getElementById('pullLogsBtn').addEventListener('click', async () => {
-  const statusEl = document.getElementById('pullLogsStatus');
-  const btn = document.getElementById('pullLogsBtn');
-  const edgeIp = document.getElementById('pullEdgeIp').value.trim();
-  const start = localInputValueToIso(document.getElementById('pullStart').value);
-  const end = localInputValueToIso(document.getElementById('pullEnd').value);
-  const apiKey = pullApiKeyInput.value.trim();
-  if (!edgeIp || !start || !end) {
-    statusEl.textContent = 'Edge IP, start, and end are required.';
-    statusEl.style.color = 'var(--critical)';
-    return;
-  }
-  if (!apiKey) {
-    statusEl.textContent = 'API key is required.';
-    statusEl.style.color = 'var(--critical)';
-    return;
-  }
-
-  const body = {
-    apiKey,
-    edgeIp,
-    logType: document.getElementById('pullLogType').value,
-    start,
-    end,
-    hostnames: splitCsv(document.getElementById('pullHostnames').value),
-    cpCodes: splitCsv(document.getElementById('pullCpCodes').value),
-    clientIps: splitCsv(document.getElementById('pullClientIps').value),
-    userAgents: splitCsv(document.getElementById('pullUserAgents').value),
-    arlContains: document.getElementById('pullArlContains').value.trim() || undefined,
-    httpStatusCodes: splitCsv(document.getElementById('pullStatusCodes').value),
-  };
-
-  btn.disabled = true;
-  statusEl.style.color = 'var(--text-muted)';
-  statusEl.textContent = 'Requesting logs from Akamai… this can take up to a minute.';
-  try {
-    const res = await fetch('/api/pull-logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data || !data.ok) {
-      const errDetail = data && data.error;
-      const msg = (errDetail && (errDetail.message || JSON.stringify(errDetail))) || `Request failed (HTTP ${res.status})`;
-      statusEl.textContent = msg;
-      statusEl.style.color = 'var(--critical)';
-      return;
-    }
-    if (!data.lines || !data.lines.length) {
-      statusEl.textContent = `Akamai returned 0 matching log lines for this window/filters (status: ${data.executionStatus}).`;
-      statusEl.style.color = 'var(--critical)';
-      return;
-    }
-    analyzeText(data.lines.join('\n'), `Pulled ${data.lines.length} log lines from Akamai (edge ${edgeIp})`);
-    statusEl.textContent = `Loaded ${data.lines.length} log lines from Akamai. Note: WAF rule names and reputation signals aren't available via this API.${data.warning ? ' ' + data.warning : ''}`;
-    statusEl.style.color = 'var(--good)';
-  } catch (err) {
-    statusEl.textContent = 'Failed to reach the pull-logs proxy: ' + err.message;
-    statusEl.style.color = 'var(--critical)';
-  } finally {
-    btn.disabled = false;
-  }
 });
 
 /* ---------- Plain-English -> AWK translator (pattern-based, no AI) ---------- */
