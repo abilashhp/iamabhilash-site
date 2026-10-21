@@ -1,0 +1,20 @@
+# Copy to /etc/systemd/system/pull-logs.service (edit the ExecStart path),
+# then create /etc/pull-logs.env with the real secrets (see README-server.md —
+# that file walks through creating it with restrictive permissions so it's
+# never readable by other users or committed to git). Then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pull-logs
+
+[Unit]
+Description=Edge Log Analyzer - Akamai grep API proxy
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /path/to/edge-log-analyzer/server/server.js
+Restart=on-failure
+RestartSec=3
+EnvironmentFile=/etc/pull-logs.env
+
+[Install]
+WantedBy=multi-user.target
