@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt" crossorigin="anonymous"></script>
 <style>
   :root {
     color-scheme: light;
@@ -91,6 +91,7 @@
   .badge.NORMAL { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); }
   .badge.WARN { background: var(--warning); color: #3a2a00; }
   .badge.CRITICAL { background: color-mix(in srgb, var(--critical) 25%, transparent); color: var(--critical); }
+  .badge.NODATA { background: var(--gridline); color: var(--text-muted); }
   .wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 
   .upload-card {
@@ -113,6 +114,7 @@
   #uploadStatus { font-size: 12px; color: var(--text-muted); width: 100%; margin-top: 4px; }
   #uploadStatus.error { color: var(--critical); }
   #uploadStatus.success { color: var(--good); }
+  #uploadStatus.warn { color: var(--serious); }
   .paste-row { width: 100%; }
   .paste-row summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); }
   .paste-row summary:hover { color: var(--text-primary); }
@@ -166,6 +168,17 @@
   .foot-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
   .geo-link { color: var(--series-1); font-size: 12px; cursor: pointer; text-decoration: underline; }
   .geo-link:hover { opacity: 0.75; }
+  .drill-link { color: var(--series-1); font-size: 12px; cursor: pointer; text-decoration: underline; background: none; border: 0; padding: 0; font-family: inherit; }
+  .drill-link:hover { opacity: 0.75; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
+  .muted { color: var(--text-muted); }
+  .turn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .turn-grid { grid-template-columns: 1fr; } }
+  .turn-head { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+  .turn-row { display: flex; gap: 24px; }
+  .turn-row .value { font-size: 20px; }
+  #groupByTable td, #groupByTable th { padding: 6px 8px; }
+  #groupByTable td.key { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; word-break: break-all; }
   details summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
   code { font-size: 12px; background: color-mix(in srgb, var(--text-muted) 15%, transparent); padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -187,7 +200,7 @@
   <div class="upload-card" id="dropZone">
     <div class="drop-label">
       <strong>Upload raw log file(s) to refresh this dashboard</strong>
-      <span>Drag &amp; drop, choose files, or paste raw lines below — parsed entirely in your browser, nothing is uploaded anywhere. Supports the Akamai edge/WAF delivery log format (space-delimited records, type <code>r</code>/<code>f</code>).</span>
+      <span>Drag &amp; drop, choose files, or paste raw lines below — parsed entirely in your browser; log lines are never uploaded. Nothing is sent to a third party unless you ask for an IP location lookup (geojs.io). Supports the Akamai edge/WAF delivery log format (space-delimited records, type <code>r</code>/<code>S</code>/<code>f</code>).</span>
       <span id="uploadStatus"></span>
     </div>
     <button class="btn primary" id="chooseBtn">Choose files…</button>
@@ -208,12 +221,12 @@
 
   <div class="card">
     <h2>Time Range <span id="rangeBadge" class="badge" style="background:var(--gridline); color:var(--text-muted);">full range</span></h2>
-    <p class="hint">Zoom into a window to re-analyze just that slice — every widget below, including Custom Query, re-runs on only this range.</p>
+    <p class="hint">Zoom into a window to re-analyze just that slice — every widget below, including Custom Query, re-runs on only this range. Times are UTC, same as the chart labels. Tip: click any bin on a timeline chart to zoom straight into it.</p>
     <div class="filter-row" style="flex-wrap: wrap; align-items: center; gap: 10px;">
-      <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">From
+      <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">From (UTC)
         <input type="datetime-local" id="rangeFrom" step="1" disabled style="padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); font-size:13px;">
       </label>
-      <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">To
+      <label style="font-size:12px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">To (UTC, inclusive)
         <input type="datetime-local" id="rangeTo" step="1" disabled style="padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); font-size:13px;">
       </label>
       <button class="btn primary" id="applyRangeBtn" disabled>Apply range</button>
@@ -246,10 +259,10 @@
     <div class="card kpi">
       <div class="label">Peak RPS</div>
       <div class="value" id="kpiPeakRps">0.9</div>
-      <div class="sub">max in any rolling 60s window</div>
+      <div class="sub">requests in busiest 60s window ÷ 60</div>
     </div>
     <div class="card kpi warn" id="kpiBlockCard">
-      <div class="label">WAF / Challenge Blocks</div>
+      <div class="label">403 / 429 Responses</div>
       <div class="value" id="kpiBlocks">106</div>
       <div class="sub" id="kpiBlocksSub">103×403 + 3×429 (19.0%)</div>
     </div>
@@ -275,37 +288,78 @@
 
   <div class="card">
     <h2>Turnaround Time Breakdown</h2>
-    <p class="hint" id="turnaroundHint">Client↔Edge (r-line turnaround time) vs. Edge↔Origin (f-line turnaround time) — isolates whether a slowdown is Akamai-side or origin-side.</p>
-    <div class="grid-2">
+    <p class="hint">Client-facing turnaround (r-line field 6) split by whether the edge had to go forward, next to the forward legs themselves (f-line field 7). Slow cache-served requests point at the edge; slow forwarded requests with equally slow forward legs point upstream. These are three different request populations — compare them, don't subtract them. p95 is shown only when a group has at least 5 requests.</p>
+    <div class="turn-grid">
       <div>
-        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px;">Client ↔ Edge</div>
-        <div style="display:flex; gap:28px;">
-          <div class="kpi"><div class="label">p50</div><div class="value" id="ceP50" style="font-size:20px;">-</div></div>
-          <div class="kpi"><div class="label">p95</div><div class="value" id="ceP95" style="font-size:20px;">-</div></div>
-          <div class="kpi"><div class="label">Overall avg</div><div class="value" id="ceAvg" style="font-size:20px;">-</div></div>
+        <div class="turn-head">Client ↔ Edge · served from cache</div>
+        <div class="turn-row">
+          <div class="kpi"><div class="label">p50</div><div class="value" id="tcP50">-</div></div>
+          <div class="kpi"><div class="label">p95</div><div class="value" id="tcP95">-</div></div>
+          <div class="kpi"><div class="label">avg</div><div class="value" id="tcAvg">-</div></div>
         </div>
+        <div class="sub muted" id="tcN" style="font-size:12px; margin-top:4px;">d/i/m flags, no o/g/p</div>
       </div>
       <div>
-        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px;">Edge ↔ Origin</div>
-        <div style="display:flex; gap:28px;">
-          <div class="kpi"><div class="label">p50</div><div class="value" id="eoP50" style="font-size:20px;">-</div></div>
-          <div class="kpi"><div class="label">p95</div><div class="value" id="eoP95" style="font-size:20px;">-</div></div>
-          <div class="kpi"><div class="label">Overall avg</div><div class="value" id="eoAvg" style="font-size:20px;">-</div></div>
+        <div class="turn-head">Client ↔ Edge · went forward</div>
+        <div class="turn-row">
+          <div class="kpi"><div class="label">p50</div><div class="value" id="toP50">-</div></div>
+          <div class="kpi"><div class="label">p95</div><div class="value" id="toP95">-</div></div>
+          <div class="kpi"><div class="label">avg</div><div class="value" id="toAvg">-</div></div>
         </div>
+        <div class="sub muted" id="toN" style="font-size:12px; margin-top:4px;">o/g/p flag: origin or peer contacted</div>
+      </div>
+      <div>
+        <div class="turn-head">Edge ↔ Forward target (f-lines)</div>
+        <div class="turn-row">
+          <div class="kpi"><div class="label">p50</div><div class="value" id="tfP50">-</div></div>
+          <div class="kpi"><div class="label">p95</div><div class="value" id="tfP95">-</div></div>
+          <div class="kpi"><div class="label">avg</div><div class="value" id="tfAvg">-</div></div>
+        </div>
+        <div class="sub muted" id="tfN" style="font-size:12px; margin-top:4px;">origin or parent tier</div>
       </div>
     </div>
   </div>
 
+  <div class="card" id="groupByCard">
+    <h2>Breakdown by Dimension</h2>
+    <p class="hint">Is it everywhere, or one edge / forward target / host / error? Pick a dimension to get per-group request count, error rates, and latency. Click a column header to sort, and "lines" to see the exact log lines behind a row (opens Custom Query with the reproducing AWK).</p>
+    <div class="filter-row" style="flex-wrap:wrap; align-items:center;">
+      <select id="groupByDim" style="padding:7px 10px; border-radius:6px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); font-size:13px;"></select>
+      <input id="groupBySearch" type="text" placeholder="Search groups…">
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="groupByTable">
+        <thead>
+          <tr>
+            <th data-key="key">Group</th>
+            <th data-key="n" class="num">Requests</th>
+            <th data-key="share" class="num">Share</th>
+            <th data-key="r4" class="num">4xx</th>
+            <th data-key="r5" class="num">5xx</th>
+            <th data-key="r0" class="num">No status (0/-)</th>
+            <th data-key="p50" class="num">p50 ms</th>
+            <th data-key="p95" class="num">p95 ms</th>
+            <th data-key="first">First → last seen (UTC)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="foot-note" id="groupByNote"></p>
+  </div>
+
   <div class="card">
     <h2>Infrastructure Locations</h2>
-    <p class="hint">Edge and origin IPs found in this file, looked up via a third-party geolocation API (geojs.io) — the only automatic lookup this tool performs; client IPs are opt-in per row in the table below.</p>
+    <p class="hint">Edge IPs and forward-target IPs found in this file. Locations are off by default: "Look up locations" sends these IPs to a third-party geolocation API (geojs.io) and keeps doing so for files you load later in this tab. Client IPs are looked up only when you click "Look up" in the table below. Geolocation of Akamai IPs is approximate.</p>
+    <div style="margin-bottom:10px;"><button class="btn" id="infraGeoBtn">Look up locations</button></div>
     <div class="grid-2">
       <div>
         <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">Edge Server(s)</div>
         <div id="edgeLocationList" style="font-size:13px; line-height:1.8;">-</div>
       </div>
       <div>
-        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">Origin Server(s)</div>
+        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;">Forward Target(s) — origin or parent tier</div>
         <div id="originLocationList" style="font-size:13px; line-height:1.8;">-</div>
       </div>
     </div>
@@ -314,12 +368,12 @@
   <div class="grid-2">
     <div class="card">
       <h2>Requests Per Second — over time</h2>
-      <p class="hint">30 equal-width bins across the full observed window</p>
+      <p class="hint">30 equal-width bins across the observed window — click a bin to zoom into it</p>
       <div class="chart-box"><canvas id="rpsChart"></canvas></div>
     </div>
     <div class="card">
       <h2>p95 Latency (ms) — over time</h2>
-      <p class="hint">Same timeline bins as RPS, shown separately (no dual-axis)</p>
+      <p class="hint">Same timeline bins as RPS; bins with no requests are left blank rather than drawn as 0 ms</p>
       <div class="chart-box"><canvas id="latChart"></canvas></div>
     </div>
   </div>
@@ -332,26 +386,26 @@
     </div>
     <div class="card">
       <h2>Cache Status Breakdown</h2>
-      <p class="hint" id="cacheHint">Object status information (field 16) — each bar is a combination of cumulative single-letter flags; hover a bar to decode it</p>
+      <p class="hint" id="cacheHint">Object status information (field 16) — each bar is a combination of cumulative single-letter flags; hover a bar to decode it, click to see its lines</p>
       <div class="chart-box"><canvas id="cacheChart"></canvas></div>
     </div>
   </div>
 
   <div class="card">
     <h2>Status Codes — over time</h2>
-    <p class="hint">2xx/3xx/4xx/5xx counts per bin, same timeline as RPS — look for a line spiking away from its own baseline (e.g. a burst of 404s)</p>
+    <p class="hint">2xx/3xx/4xx/5xx counts per bin, same timeline as RPS — look for a line spiking away from its own baseline (e.g. a burst of 404s); click a bin to zoom into it</p>
     <div class="chart-box tall"><canvas id="statusTimeChart"></canvas></div>
   </div>
 
   <div class="grid-2">
     <div class="card">
       <h2>Response Code Distribution</h2>
-      <p class="hint" id="statusHint">559 client-facing requests</p>
+      <p class="hint" id="statusHint">559 client-facing requests — click a slice to see its lines</p>
       <div class="chart-box"><canvas id="statusChart"></canvas></div>
     </div>
     <div class="card">
       <h2>Top 5 Blocked / Error Endpoints</h2>
-      <p class="hint" id="failHint">404 + 5xx = 0 in this sample — shown instead: 4xx (WAF-blocked + rate-limited) by normalized endpoint</p>
+      <p class="hint" id="failHint">4xx + 5xx responses by normalized endpoint (403/429 blocks included) — click a bar to see its lines</p>
       <div class="chart-box"><canvas id="failChart"></canvas></div>
     </div>
   </div>
@@ -359,27 +413,27 @@
   <div class="grid-2">
     <div class="card">
       <h2>Content-Type Distribution</h2>
-      <p class="hint" id="contentTypeHint">Top content types served, by response count</p>
+      <p class="hint" id="contentTypeHint">Top content types served, by response count — click a slice to see its lines</p>
       <div class="chart-box"><canvas id="contentTypeChart"></canvas></div>
     </div>
     <div class="card">
       <h2>Top WAF Rules Triggered</h2>
-      <p class="hint" id="wafHint">WAF Info (field 62) — human-readable rule/attack-signature name, not the app ID or numeric rule ID</p>
+      <p class="hint" id="wafHint">WAF Info (field 62) — human-readable rule/attack-signature name. Presence means the WAF evaluated and matched; it doesn't by itself say whether the request was denied. Click a bar to see its lines.</p>
       <div class="chart-box"><canvas id="wafChart"></canvas></div>
     </div>
   </div>
 
   <div class="card">
     <h2>Top 10 Slowest Endpoints (p95 edge time, ms)</h2>
-    <p class="hint">Normalized paths (IDs/tokens collapsed); minimum 2 samples per endpoint</p>
+    <p class="hint">Normalized paths (numeric IDs and digit-bearing tokens of 12+ chars collapsed; host prefixed when the file has several hosts); minimum 2 samples per endpoint — click a bar to see its lines</p>
     <div class="chart-box tall"><canvas id="slowChart"></canvas></div>
   </div>
 
   <div class="card">
-    <h2>Suspicious Client IPs</h2>
-    <p class="hint">Top request sources, ranked by volume — click column headers to sort. "Look up" under Location sends that one IP to a third-party geolocation API (geojs.io) — nothing else on this page does that.</p>
+    <h2>Top Client IPs by Volume</h2>
+    <p class="hint">The 12 busiest client IPs (field 11 — in parent-tier logs these can be Akamai edges). The search box covers every client IP in the file, not just these 12. Click an IP to see its lines; "Look up" under Location sends that one IP to geojs.io.</p>
     <div class="filter-row">
-      <input id="ipFilter" type="text" placeholder="Filter by IP, status, WAF reason, or user-agent…">
+      <input id="ipFilter" type="text" placeholder="Search all client IPs by IP, status, error reason, or user-agent…">
     </div>
     <table id="ipTable">
       <thead>
@@ -389,9 +443,9 @@
           <th data-key="peak_60s">Peak (60s)</th>
           <th data-key="blocked">Blocked (403/429)</th>
           <th data-key="top_status">Top Status</th>
-          <th data-key="waf_reason">WAF Reason</th>
+          <th data-key="waf_reason">Top Error Reason</th>
           <th data-key="hosts"># Hosts</th>
-          <th data-key="ua_sample">Sample User-Agent</th>
+          <th data-key="ua_sample">Most Common User-Agent</th>
           <th>Location</th>
         </tr>
       </thead>
@@ -399,7 +453,7 @@
     </table>
   </div>
 
-  <div class="card">
+  <div class="card" id="customQueryCard">
     <h2>Custom Query <span id="queryBadge" class="badge" style="background:var(--gridline); color:var(--text-muted);">no file loaded</span></h2>
     <p class="hint">
       Describe what you want in plain English — this runs entirely in your browser via a small pattern-matcher
@@ -417,23 +471,30 @@
     </div>
     <div id="nlExplain" style="font-size:12px; margin:6px 0 2px; min-height:16px;"></div>
 
-    <details style="margin-top:10px;">
+    <details style="margin-top:10px;" id="advancedQuery">
       <summary>Advanced: write AWK + pipeline directly</summary>
       <p class="hint" style="margin-top:10px;">
         Supports <code>$1</code>…<code>$N</code>, <code>$0</code>, <code>$NF</code>, <code>NR</code>, <code>NF</code>,
-        <code>== != ~ !~ &lt; &lt;= &gt; &gt;= &amp;&amp; || !</code>, string concatenation, and <code>print</code>.
-        Pipe into <code>sort [-n -r -u]</code>, <code>uniq [-c]</code>, <code>head</code>/<code>tail</code> <code>[-N]</code>,
-        <code>grep [-v -i] PATTERN</code>, or <code>wc -l</code>. Field numbers follow the documented r-line / f-line
-        column layout (1-indexed) — e.g. on r-lines <code>$14</code>=status, <code>$16</code>=object status
-        information; on f-lines <code>$15</code>=status, <code>$24</code>=forward hostname.
+        <code>== != ~ !~ &lt; &lt;= &gt; &gt;= &amp;&amp; || !</code>, string concatenation, and <code>print</code>
+        (no arithmetic or variables). Pipe into <code>sort [-n -r -u]</code>, <code>uniq [-c]</code>,
+        <code>head</code>/<code>tail</code> <code>[-N | -n N]</code>, <code>grep [-v -i -E -F -c] PATTERN</code>, or
+        <code>wc -l</code>; any other option is rejected rather than silently ignored. Queries run over the lines that
+        passed parsing, in the current time range. Field numbers follow the documented r-line / f-line column layout
+        (1-indexed) — e.g. on r-lines <code>$14</code>=status, <code>$15</code>=error reason, <code>$16</code>=object
+        status information; on S records (client-facing, compact layout) <code>$16</code>=status, <code>$32</code>=error
+        reason, <code>$18</code>=object status, <code>$31</code>=path after the host; on f-lines <code>$11</code>=forward
+        IP, <code>$15</code>=status, <code>$24</code>=forward hostname, <code>$30</code>=error. A program can hold
+        several <code>pattern {print …}</code> rules, e.g. one per record type.
       </p>
       <div class="filter-row" style="flex-wrap: wrap;">
-        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $14}' | sort | uniq -c | sort -rn">status code tally</button>
-        <button class="btn" data-example="awk '$2==&quot;r&quot; && $15!=&quot;-&quot; {print $14 &quot;\t&quot; $15 &quot;\t&quot; $13}' | sort | uniq -c | sort -rn">errors + URI</button>
-        <button class="btn" data-example="awk '$2==&quot;r&quot; && $12==&quot;GET&quot; {print $11}' | sort | uniq -c | sort -rn | head -10">top GET client IPs</button>
-        <button class="btn" data-example="awk '$2==&quot;r&quot; && $14==&quot;403&quot; {print $16}' | sort | uniq -c | sort -rn">403s → object status info</button>
-        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $13}' | sort | uniq -c | sort -rn | head -5">top 5 endpoints</button>
-        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $21}' | sort | uniq -c | sort -rn | head -5">top 5 user agents</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $14}' | sort | uniq -c | sort -rn" data-example-s="awk '$2==&quot;r&quot; {print $14} $2==&quot;S&quot; {print $16}' | sort | uniq -c | sort -rn">status code tally</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; && $15!=&quot;-&quot; {print $14 &quot;\t&quot; $15 &quot;\t&quot; $13}' | sort | uniq -c | sort -rn" data-example-s="awk '$2==&quot;r&quot; &amp;&amp; $15!=&quot;-&quot; {print $14 &quot;\t&quot; $15 &quot;\t&quot; $13} $2==&quot;S&quot; &amp;&amp; $32!=&quot;-&quot; {print $16 &quot;\t&quot; $32 &quot;\t&quot; $31}' | sort | uniq -c | sort -rn">4xx/5xx by error reason + URI</button>
+        <button class="btn" data-example="awk '$2==&quot;f&quot; {print $15}' | sort | uniq -c | sort -rn">forward-leg status codes</button>
+        <button class="btn" data-example="awk '$2==&quot;f&quot; && $30!=&quot;-&quot; {print $15 &quot;\t&quot; $30 &quot;\t&quot; $11}' | sort | uniq -c | sort -rn">forward-leg errors by target</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; && $12==&quot;GET&quot; {print $11}' | sort | uniq -c | sort -rn | head -10" data-example-s="awk '($2==&quot;r&quot; || $2==&quot;S&quot;) &amp;&amp; $12==&quot;GET&quot; {print $11}' | sort | uniq -c | sort -rn | head -10">top GET client IPs</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; && $14==&quot;403&quot; {print $16}' | sort | uniq -c | sort -rn" data-example-s="awk '$2==&quot;r&quot; &amp;&amp; $14==&quot;403&quot; {print $16} $2==&quot;S&quot; &amp;&amp; $16==&quot;403&quot; {print $18}' | sort | uniq -c | sort -rn">403s → object status info</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $13}' | sort | uniq -c | sort -rn | head -5" data-example-s="awk '$2==&quot;r&quot; {print $13} $2==&quot;S&quot; {print $31}' | sort | uniq -c | sort -rn | head -5">top 5 endpoints</button>
+        <button class="btn" data-example="awk '$2==&quot;r&quot; {print $21}' | sort | uniq -c | sort -rn | head -5" data-example-s="awk '$2==&quot;r&quot; {print $21} $2==&quot;S&quot; {print $36}' | sort | uniq -c | sort -rn | head -5">top 5 user agents</button>
       </div>
       <textarea id="queryInput" disabled rows="3" placeholder="Upload a log file above to enable custom queries…"
         style="width:100%; font-family:ui-monospace,monospace; font-size:12.5px; padding:10px; border-radius:7px; border:1px solid var(--border); background:var(--page-plane); color:var(--text-primary); resize:vertical;"></textarea>
@@ -457,10 +518,11 @@
   </div>
 
   <details>
-    <summary>Raw aggregate data (status codes, security pattern hits, origin hosts)</summary>
+    <summary>Raw aggregate data (parse report, status codes, forward legs, URI pattern matches)</summary>
     <div class="card" style="margin-top:8px;">
       <div class="filter-row">
         <button class="btn" id="exportJsonBtn">Download dashboard summary (JSON)</button>
+        <button class="btn" id="downloadSkippedBtn" style="display:none;">Download skipped lines (.txt)</button>
       </div>
       <table>
         <thead><tr><th>Metric</th><th>Value</th></tr></thead>
@@ -490,18 +552,18 @@ const SAMPLE_DATA = {
     count5xx: 0, count5xxSub: "no server errors observed", good5xx: true,
     p95: "165ms", p95Sub: "p50 0ms · p99 336ms · max 862ms",
     peakRps: "0.9",
-    blocks: 106, blocksSub: "103×403 + 3×429 (19.0%)"
+    blocks: 106, blocksSub: "103×403 + 3×429 (19.0%) · 98 with WAF info · 3 origin-contacted"
   },
   turnaround: {
-    clientEdge: { p50: 0, p95: 165, avg: 41 },
-    edgeOrigin: { p50: 12, p95: 203, avg: 58 },
-    hasOriginData: true
+    cache: { n: 359, p50: 0, p95: 41, avg: 9 },
+    contacted: { n: 175, p50: 96, p95: 336, avg: 121 },
+    forward: { n: 441, p50: 12, p95: 203, avg: 58 }
   },
   infra: { edgeIps: [], originIps: [] },
   timeline: {
     labels: ["10:12","10:31","10:51","11:10","11:30","11:49","12:09","12:29","12:48","13:08","13:27","13:47","14:06","14:26","14:46","15:05","15:25","15:44","16:04","16:23","16:43","17:03","17:22","17:42","18:01","18:21","18:40","19:00","19:20","19:39"],
     rps: [0.0085,0.006,0.0264,0.0034,0.0332,0.0051,0.0077,0.0043,0.0068,0.0034,0.0409,0.0051,0.0017,0.0221,0.0204,0.0502,0.0179,0.0153,0.0043,0.0102,0.0034,0.029,0.0324,0.0094,0.0187,0.0375,0.0179,0.006,0.0026,0.0264],
-    p95:  [127.0,113.2,167.0,0.0,180.4,47.8,191.8,85.8,211.4,228.4,140.5,23.5,193.9,89.8,66.6,15.3,136.0,178.8,41.4,0.0,56.8,177.2,210.0,52.0,99.6,160.0,70.0,0.0,0.0,160.8],
+    p95:  [127.0,113.2,167.0,null,180.4,47.8,191.8,85.8,211.4,228.4,140.5,23.5,193.9,89.8,66.6,15.3,136.0,178.8,41.4,null,56.8,177.2,210.0,52.0,99.6,160.0,70.0,null,null,160.8],
     status2xx: [5,4,16,2,20,3,5,3,4,2,25,3,1,13,12,30,11,9,3,6,2,18,20,6,11,23,11,4,2,16],
     status3xx: [3,2,9,1,11,2,3,1,2,1,14,2,1,8,7,17,6,5,1,3,1,10,11,3,6,13,6,2,1,9],
     status4xx: [0,0,1,0,1,0,0,0,0,0,1,0,0,1,1,96,1,0,0,0,0,1,1,0,1,1,1,0,0,1],
@@ -543,7 +605,7 @@ const SAMPLE_DATA = {
   coverageGap: { seconds: 2820, pctOfWindow: 8.0, startStr: "2026-09-17 13:42:07" },
   statusBuckets: { "2xx": 290, "3xx": 161, "4xx": 108, "5xx": 0 },
   statusHint: "559 client-facing requests",
-  failHint: "404 + 5xx = 0 in this sample — shown instead: 4xx (WAF-blocked + rate-limited) by normalized endpoint",
+  failHint: "4xx + 5xx responses by normalized endpoint (403/429 blocks included)",
   topFail: [
     {endpoint: "/ws/LegacyAuthGateway.dll", count: 55},
     {endpoint: "/ (root)", count: 18},
@@ -581,25 +643,53 @@ const SAMPLE_DATA = {
     "Status 200": 224, "Status 202": 66, "Status 301": 36, "Status 302": 19,
     "Status 307": 106, "Status 400": 1, "Status 403": 103, "Status 429": 3, "Status 483": 1,
     "Method GET": 342, "Method POST": 217,
-    "Security: env/config file scan attempts": 15,
-    "Security: encoded path-traversal attempts": 2,
-    "Security: SQLi / XSS probes detected": 0,
-    "Security: True Client IP differs from edge Client IP": 9,
+    "URI pattern match (heuristic): env/config file": 15,
+    "URI pattern match (heuristic): path traversal": 2,
+    "URI pattern match (heuristic): SQLi-like": 0,
+    "URI pattern match (heuristic): XSS-like": 0,
+    "True-Client-IP differs from client IP (proxy in path?)": 9,
     "Log coverage: largest gap between requests": "47m 0s (8.0% of window), starting 2026-09-17 13:42:07 UTC",
-    "Origin upstream: origin-pool-1.internal.example": 225,
-    "Origin upstream: primary-origin.example.com": 134,
-    "Origin upstream: 127.0.0.1 (edge-local)": 82
+    "Forward host: origin-pool-1.internal.example": 225,
+    "Forward host: primary-origin.example.com": 134,
+    "Forward host: 127.0.0.1 (edge-local)": 82
   }
 };
 
 /* ---------- Parsing engine (Akamai edge/WAF delivery log) ---------- */
-/* Field numbers below follow the documented r/f column layout (1-indexed,
-   i.e. array index = field number - 1):
-   Record type 'r' (client-facing, >=91 space-delimited fields):
-     [2]=epoch ts(3)  [5]=turnaround time(6, latency proxy)  [10]=client ip(11)  [11]=method(12)
-     [12]=ARL/uri(13)  [13]=status(14)  [14]=error reason(15)  [17]=host header(18)  [20]=user-agent(21, url-encoded)
-   Record type 'f' (origin/forward leg, 63-90 fields):
-     [14]=status(15)  [23]=forward hostname(24)                                 */
+/* @testable:begin */
+// Positional field map: 0-based array index (awk's $N is index + 1). This is
+// the single source for field positions — parsing, analysis, group-by and
+// drill-down queries all read from here so they can't drift apart.
+// r = client-facing request (>=91 fields), f = forward/origin leg (63-90),
+// S = client-facing request in the compact layout (>=78 fields).
+const RF = { edgeIp: 0, type: 1, ts: 2, turnaround: 5, bytes: 9, clientIp: 10, method: 11, arl: 12, status: 13, error: 14, objStatus: 15, contentType: 16, host: 17, ua: 20, trueClientIp: 59, waf: 61 };
+const FF = { edgeIp: 0, type: 1, ts: 2, turnaround: 6, forwardIp: 10, clientIp: 11, method: 12, arl: 13, status: 14, objStatus: 18, forwardHost: 23, error: 29 };
+// S records carry the same request as an r line but in a different order, and
+// split the ARL into typecode/cpcode/serial/host plus a path relative to the
+// host (no leading "/D/<cp>/<serial>/<ttl>/<host>/"). They have no
+// True-Client-IP column. The WAF column (field 47) is "configId||id" rather
+// than r-lines' "configId|ruleId:...:RULE-NAME|", so its signal label is an id.
+const SF = { edgeIp: 0, type: 1, ts: 2, turnaround: 5, bytes: 9, clientIp: 10, method: 11, cpcode: 12, serial: 13, host: 14, status: 15, objStatus: 17, contentType: 18, typecode: 20, path: 30, error: 31, referrer: 34, ua: 35, requestId: 37, waf: 46 };
+const R_MIN_FIELDS = 91, F_MIN_FIELDS = 63, S_MIN_FIELDS = 78;
+const RF_KEY_BY_INDEX = Object.fromEntries(Object.entries(RF).map(([k, i]) => [i, k]));
+// ARL TTL segment for S records, which don't log one. Any all-digit value
+// normalizes to {id}, giving S endpoints the same "/D/{id}/{id}/{id}/host/..."
+// shape as r-line ARLs so both record types group together.
+const S_ARL_TTL = '0';
+// Re-shapes an S record onto the r-line positions so analyze() and groupBy()
+// treat both client-facing layouts identically. Columns S doesn't have read
+// as '-', exactly like an empty r-line column; buildDrillQuery relies on that.
+function sToRView(s) {
+  const v = new Array(RF.waf + 1);
+  for (const key in RF) v[RF[key]] = SF[key] !== undefined ? s[SF[key]] : '-';
+  v[RF.arl] = `/${s[SF.typecode]}/${s[SF.cpcode]}/${s[SF.serial]}/${S_ARL_TTL}/${s[SF.host]}/${s[SF.path]}`;
+  return v;
+}
+// Epoch-seconds sanity window (2000-01-01 .. 2100-01-01). Also catches lines
+// whose fields shifted, because field 3 then holds something that isn't a time.
+const TS_MIN = 946684800, TS_MAX = 4102444800;
+const NBINS = 30;
+const MIN_N_FOR_P95 = 5;
 
 function pct(sortedArr, p) {
   if (!sortedArr.length) return 0;
@@ -618,13 +708,113 @@ function bucketOf(status) {
   if (n >= 500 && n < 600) return '5xx';
   return 'other';
 }
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escapeHtml(v) { return String(v ?? '').replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]); }
+// For regexes embedded in generated awk programs: escapes regex metachars and
+// '/', and writes ' as \x27 so it can't close the shell-style '...' quoting.
+function reEscape(s) { return String(s).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&').replace(/'/g, '\\x27'); }
+function awkStr(v) { return '"' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, '\\x27') + '"'; }
+function minMax(values) {
+  let lo = Infinity, hi = -Infinity;
+  for (const v of values) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  return [lo, hi];
+}
+function formatUtc(epochSec) { return new Date(epochSec * 1000).toISOString().replace('T', ' ').slice(0, 19); }
+// The same tokenisation the Custom Query engine uses (awk's default field
+// splitting), so a dashboard number and the query that reproduces it always
+// see identical fields. Fast path for the normal single-space case.
+function splitFields(line) {
+  if (!line) return [];
+  if (line.indexOf('  ') === -1 && line.indexOf('\t') === -1 && line[0] !== ' ' && line[line.length - 1] !== ' ') return line.split(' ');
+  const t = line.trim();
+  return t ? t.split(/\s+/) : [];
+}
+// Numeric IDs, and 12+ char tokens that contain a digit (hashes, session ids,
+// UUIDs). Requiring a digit keeps real path words like "registration" or
+// "subscriptions" from being merged into one {token} bucket.
+const ID_SEG = /^\d+\.?$/;
+const TOKEN_SEG = /^(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{12,}$/;
+// Literal braces are doubled ("{{id}}") so a path that really contains "{id}"
+// can't be confused with the placeholder.
 function normalizeUri(uri) {
-  const pathOnly = uri.split('?')[0];
-  return pathOnly.split('/').map(p => {
-    if (/^\d+\.?$/.test(p)) return '{id}';
-    if (p.length >= 12 && /^[A-Za-z0-9_-]+$/.test(p)) return '{token}';
-    return p;
-  }).join('/');
+  return uri.split('?')[0].split('/').map((p) => (ID_SEG.test(p) ? '{id}' : TOKEN_SEG.test(p) ? '{token}' : p.replace(/[{}]/g, '$&$&'))).join('/');
+}
+// Regex for one segment of a normalizeUri() result.
+function segRegex(s) {
+  if (s === '{id}') return '\\d+\\.?';
+  if (s === '{token}') return '(?!\\d+(?:\\/|\\?|$))(?=[A-Za-z0-9_-]*\\d)[A-Za-z0-9_-]{12,}';
+  return reEscape(s.replace(/\{\{/g, '{').replace(/\}\}/g, '}'));
+}
+// Regex matching exactly the raw ARLs whose normalizeUri() equals `norm`.
+function normPathRegex(norm) {
+  return '^' + norm.split('/').map(segRegex).join('\\/') + '(\\?.*)?$';
+}
+function endpointOf(f, multiHost) {
+  const path = normalizeUri(f[RF.arl]);
+  return multiHost ? `${f[RF.host]} ${path}` : path;
+}
+function endpointDrill(host, path, multiHost) {
+  // `norm` lets buildDrillQuery rebuild the match for S records' split ARL.
+  const conds = [{ field: RF.arl, op: 're', value: normPathRegex(path), norm: path }];
+  if (multiHost) conds.unshift({ field: RF.host, op: 'eq', value: host });
+  return { rec: 'r', conds };
+}
+function statusClassDrill(cls) {
+  const lo = { '2xx': 200, '3xx': 300, '4xx': 400, '5xx': 500 }[cls];
+  return { rec: 'r', conds: [{ field: RF.status, op: 'range', lo, hi: lo + 99 }] };
+}
+function condExpr(index, c) {
+  const ref = '$' + (index + 1);
+  if (c.op === 'eq') return `${ref}==${awkStr(c.value)}`;
+  if (c.op === 'ne') return `${ref}!=${awkStr(c.value)}`;
+  if (c.op === 're') return `${ref}~/${c.value}/`;
+  return `${ref}>=${c.lo} && ${ref}<=${c.hi}`;
+}
+// How a condition evaluates against a column S records don't have ('-' in
+// sToRView). Mirrors awk: '-' is a string, so it never satisfies a range.
+function condMatchesDash(c) {
+  if (c.op === 'eq') return c.value === '-';
+  if (c.op === 'ne') return c.value !== '-';
+  if (c.op === 're') return new RegExp(c.value).test('-');
+  return false;
+}
+// S-record awk clauses for an endpoint condition: the normalized ARL
+// "/<typecode>/<cp>/<serial>/<ttl>/<host>/<rest>" is matched piecewise
+// against the columns sToRView assembled it from. null = no S record can match.
+function sArlClauses(norm) {
+  const segs = norm.split('/');
+  if (segs.length < 7 || segs[0] !== '' || segs[4] !== '{id}') return null;
+  const lit = (s) => s.replace(/\{\{/g, '{').replace(/\}\}/g, '}');
+  const piece = (index, seg) => (seg === '{id}' || seg === '{token}' ? `$${index + 1}~/^${segRegex(seg)}$/` : `$${index + 1}==${awkStr(lit(seg))}`);
+  return [
+    piece(SF.typecode, segs[1]), piece(SF.cpcode, segs[2]), piece(SF.serial, segs[3]), piece(SF.host, segs[5]),
+    `$${SF.path + 1}~/${normPathRegex(segs.slice(6).join('/'))}/`,
+  ];
+}
+// The S half of an r drill spec, or null when no S record can satisfy it.
+function sDrillClauses(conds) {
+  const parts = [`$2=="S"`];
+  for (const c of conds) {
+    const key = RF_KEY_BY_INDEX[c.field];
+    if (key === 'arl') {
+      const arl = c.norm !== undefined ? sArlClauses(c.norm) : null;
+      if (!arl) return null;
+      parts.push(...arl);
+    } else if (SF[key] === undefined) {
+      if (!condMatchesDash(c)) return null;
+    } else parts.push(condExpr(SF[key], c));
+  }
+  return [...new Set(parts)]; // an endpoint's host can appear both as a host and an ARL condition
+}
+// Turns a drill spec into an awk program that prints the raw lines behind a
+// dashboard number. Runs over the same parsed, range-scoped lines as the
+// widget, so its line count must equal the number that was clicked. With
+// includeS, client-facing specs also match S records at their own positions.
+function buildDrillQuery(spec, { includeS = false } = {}) {
+  const parts = [`$2==${awkStr(spec.rec)}`, ...spec.conds.map((c) => condExpr(c.field, c))];
+  const sParts = includeS && spec.rec === 'r' ? sDrillClauses(spec.conds) : null;
+  if (!sParts) return `awk '${parts.join(' && ')}'`;
+  return `awk '(${parts.join(' && ')}) || (${sParts.join(' && ')})'`;
 }
 function safeDecode(s) {
   try { return decodeURIComponent(s); } catch (e) { return s.replace(/%20/g, ' '); }
@@ -717,6 +907,12 @@ function decodeObjectStatus1(raw) {
   }
   return out;
 }
+// SureRoute route-test fetches: Ghost-internal probes (often from 127.0.0.1),
+// not user traffic. Flagged by the 't' object-status flag or the default
+// test-object filename.
+function isSureRouteProbe(f) {
+  return (f[RF.objStatus] || '').includes('t') || /\/sureroute-test-object\.html$/.test((f[RF.arl] || '').split('?')[0]);
+}
 // Cache hit ratio uses the documented semantics directly: d/i/m mean the
 // object was already in this Ghost's own cache (disk/buffer/memory) — a hit
 // even if 'o' is also present (origin was contacted only to revalidate a
@@ -733,214 +929,277 @@ function classifyCacheStatus(raw) {
   if (raw.includes('s')) return 'revalidated';
   return 'other';
 }
+// For the turnaround split: did the edge answer from its own cache, or go
+// forward (origin 'o', ICP/RDC peer 'g', hierarchy parent 'p')? A d/i/m hit
+// that also has 'o' was revalidated against origin, so it counts as forward.
+function servedClass(raw) {
+  if (!raw || raw === '-') return 'other';
+  if (/[ogp]/.test(raw)) return 'contacted';
+  if (/[dim]/.test(raw)) return 'cache';
+  return 'other';
+}
 
+const SKIP_REASONS = {
+  notRF: 'record type (field 2) is not r, S or f',
+  fieldCount: 'unexpected field count for its record type',
+  badTimestamp: 'field 3 is not a plausible epoch timestamp',
+  misaligned: 'status field is not numeric (fields look shifted)',
+};
+const MIN_FIELDS_OK = {
+  r: (n) => n >= R_MIN_FIELDS,
+  S: (n) => n >= S_MIN_FIELDS,
+  f: (n) => n >= F_MIN_FIELDS && n < R_MIN_FIELDS,
+};
+const STATUS_INDEX = { r: RF.status, S: SF.status, f: FF.status };
+// rLines holds every client-facing record (r lines, and S lines re-shaped by
+// sToRView); `lines` keeps the original text so queries see the real columns.
 function parseLogText(text) {
-  const lines = text.split('\n').map(l => l.replace(/\r$/, '')).filter(l => l.trim().length);
-  const rLines = [], fLines = [];
-  for (const l of lines) {
-    const f = l.split(' ');
-    if (f.length >= 91 && f[1] === 'r') rLines.push(f);
-    else if (f.length >= 63 && f.length < 91 && f[1] === 'f') fLines.push(f);
+  const lines = [], lineTs = [], rLines = [], fLines = [], skippedLines = [];
+  const seen = new Set();
+  const report = { totalLines: 0, r: 0, S: 0, f: 0, duplicates: 0, skipped: { notRF: 0, fieldCount: 0, badTimestamp: 0, misaligned: 0 }, skippedTotal: 0 };
+  for (let l of text.split('\n')) {
+    if (l.endsWith('\r')) l = l.slice(0, -1);
+    if (!l.trim()) continue;
+    report.totalLines++;
+    if (seen.has(l)) { report.duplicates++; continue; }
+    seen.add(l);
+    const f = splitFields(l);
+    const type = f[1];
+    let reason = null;
+    if (!MIN_FIELDS_OK[type]) reason = 'notRF';
+    else if (!MIN_FIELDS_OK[type](f.length)) reason = 'fieldCount';
+    else {
+      const t = Number(f[RF.ts]);
+      if (!(t >= TS_MIN && t <= TS_MAX)) reason = 'badTimestamp';
+      else if (!/^(\d{1,3}|-)$/.test(f[STATUS_INDEX[type]])) reason = 'misaligned';
+    }
+    if (reason) { report.skipped[reason]++; skippedLines.push(`${reason}\t${l}`); continue; }
+    lines.push(l);
+    lineTs.push(Number(f[RF.ts]));
+    report[type]++;
+    if (type === 'f') fLines.push(f); else rLines.push(type === 'S' ? sToRView(f) : f);
   }
-  return { lines, rLines, fLines };
+  report.skippedTotal = Object.values(report.skipped).reduce((a, b) => a + b, 0);
+  return { lines, lineTs, rLines, fLines, report, skippedLines };
+}
+function parseReportText(rep) {
+  const clients = rep.r + rep.S;
+  const split = rep.S ? ` (${rep.r} r + ${rep.S} S)` : '';
+  const parts = [`Parsed ${clients + rep.f} of ${rep.totalLines} lines (${clients} client requests${split} + ${rep.f} forward legs)`];
+  if (rep.skippedTotal) {
+    const why = Object.entries(rep.skipped).filter(([, n]) => n).map(([k, n]) => `${n} ${SKIP_REASONS[k]}`).join('; ');
+    parts.push(`skipped ${rep.skippedTotal}: ${why}`);
+  }
+  if (rep.duplicates) parts.push(`removed ${rep.duplicates} exact duplicate line(s)`);
+  return parts.join(' · ');
+}
+
+function binIndexOf(t, t0, binWidth) {
+  const i = Math.floor((t - t0) / binWidth);
+  return i < 0 ? 0 : i >= NBINS ? NBINS - 1 : i;
+}
+// 'bin' ranges reuse analyze()'s own bin arithmetic so zooming into a bin
+// yields exactly the requests that bin counted; 'manual' ranges include the
+// whole final second the user typed.
+function makeRangePredicate(range) {
+  if (!range) return () => true;
+  if (range.kind === 'bin') return (t) => t >= range.t0 && t <= range.t1 && binIndexOf(t, range.t0, range.binWidth) === range.idx;
+  return (t) => t >= range.from && t < range.toExclusive;
+}
+function latencyStats(values) {
+  const s = values.slice().sort((a, b) => a - b);
+  const n = s.length;
+  return {
+    n,
+    p50: n ? Math.round(pct(s, 0.5)) : null,
+    p95: n >= MIN_N_FOR_P95 ? Math.round(pct(s, 0.95)) : null,
+    avg: n ? Math.round(s.reduce((a, b) => a + b, 0) / n) : null,
+  };
+}
+function peakIn60s(sortedTs) {
+  let peak = 0, left = 0;
+  for (let right = 0; right < sortedTs.length; right++) {
+    while (sortedTs[right] - sortedTs[left] > 60) left++;
+    peak = Math.max(peak, right - left + 1);
+  }
+  return peak;
 }
 
 function analyze(rLines, fLines) {
-  const ts = rLines.map(f => fnum(f[2])).sort((a, b) => a - b);
+  const total = rLines.length;
+  const ts = rLines.map((f) => fnum(f[RF.ts])).sort((a, b) => a - b);
   const t0 = ts[0], t1 = ts[ts.length - 1];
   const duration = Math.max(t1 - t0, 0.001);
+  const hostSet = new Set();
+  for (const f of rLines) hostSet.add(f[RF.host]);
+  const multiHost = hostSet.size > 1;
 
-  // latency: r-line turnaround time (field 6) is the client<->edge leg —
-  // how long the edge took to answer the client, start to finish.
-  const lat = rLines.map(f => fnum(f[5])).sort((a, b) => a - b);
+  const lat = rLines.map((f) => fnum(f[RF.turnaround])).sort((a, b) => a - b);
   const latency = {
-    avg: lat.reduce((a, b) => a + b, 0) / (lat.length || 1),
-    p50: pct(lat, 0.5), p90: pct(lat, 0.9), p95: pct(lat, 0.95), p99: pct(lat, 0.99),
-    max: lat.length ? lat[lat.length - 1] : 0
+    p50: pct(lat, 0.5), p95: pct(lat, 0.95), p99: pct(lat, 0.99),
+    max: lat.length ? lat[lat.length - 1] : 0,
   };
 
-  // origin latency: f-line turnaround time (field 7) is the edge<->origin
-  // leg — how long the origin took to answer the edge. Comparing this
-  // against the client<->edge leg above isolates whether a slowdown is
-  // Akamai-side (cache/WAF/TLS overhead) or origin-side.
-  const originLat = fLines.map(f => fnum(f[6])).sort((a, b) => a - b);
-  const originLatency = {
-    avg: originLat.reduce((a, b) => a + b, 0) / (originLat.length || 1),
-    p50: pct(originLat, 0.5), p95: pct(originLat, 0.95),
-  };
-
-  // status
   const statusCounts = new Map();
   const statusBuckets = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, other: 0 };
   const methodCounts = new Map();
-  // cache status (field 16), content-type (field 17), WAF info (field 62)
   const cacheCounts = new Map();
   const cacheBuckets = { hit: 0, miss: 0, negative: 0, peer: 0, revalidated: 0, other: 0, unknown: 0 };
   const ctCounts = new Map();
   const wafTokenCounts = new Map();
-  let wafHitRequests = 0;
-  let totalBytesServed = 0;
-  let trueClientIpMismatches = 0;
+  const latCache = [], latContacted = [];
+  let wafHitRequests = 0, totalBytesServed = 0, trueClientIpMismatches = 0;
+  let blockedWithWaf = 0, blockedOriginContacted = 0, sureRouteProbes = 0, sureRoute5xx = 0;
   for (const f of rLines) {
-    statusCounts.set(f[13], (statusCounts.get(f[13]) || 0) + 1);
-    statusBuckets[bucketOf(f[13])]++;
-    methodCounts.set(f[11], (methodCounts.get(f[11]) || 0) + 1);
+    const status = f[RF.status];
+    statusCounts.set(status, (statusCounts.get(status) || 0) + 1);
+    statusBuckets[bucketOf(status)]++;
+    if (isSureRouteProbe(f)) {
+      sureRouteProbes++;
+      if (bucketOf(status) === '5xx') sureRoute5xx++;
+    }
+    methodCounts.set(f[RF.method], (methodCounts.get(f[RF.method]) || 0) + 1);
 
-    const cacheRaw = f[15] || '-';
-    cacheCounts.set(cacheRaw, (cacheCounts.get(cacheRaw) || 0) + 1);
-    cacheBuckets[classifyCacheStatus(cacheRaw)]++;
+    const os = f[RF.objStatus] || '-';
+    cacheCounts.set(os, (cacheCounts.get(os) || 0) + 1);
+    cacheBuckets[classifyCacheStatus(os)]++;
+    const served = servedClass(os);
+    if (served === 'cache') latCache.push(fnum(f[RF.turnaround]));
+    else if (served === 'contacted') latContacted.push(fnum(f[RF.turnaround]));
 
-    const ct = (f[16] || '-').split(';')[0].split(',')[0].trim() || '-';
+    const ct = (f[RF.contentType] || '-').split(';')[0].split(',')[0].trim() || '-';
     ctCounts.set(ct, (ctCounts.get(ct) || 0) + 1);
 
-    // Field 62: "appId|ruleId|ruleName" when the WAF engine evaluated this
-    // request. The last segment is the human-readable attack signature
-    // (e.g. "LFI-ANOMALY") — far more actionable to tally than the app ID
-    // or numeric rule ID that precede it.
-    const wafRaw = f[61];
+    // Field 62: "appId|ruleId|ruleName". The last segment is the readable
+    // attack signature (e.g. "LFI-ANOMALY").
+    const wafRaw = f[RF.waf];
     if (wafRaw && wafRaw !== '-') {
       wafHitRequests++;
-      const parts = wafRaw.split('|').map(p => p.trim()).filter(Boolean);
+      const parts = wafRaw.split('|').map((p) => p.trim()).filter(Boolean);
       const ruleName = parts.length ? parts[parts.length - 1] : wafRaw;
       wafTokenCounts.set(ruleName, (wafTokenCounts.get(ruleName) || 0) + 1);
     }
-
-
-    // Field 60: True Client IP (first public IP in X-Forwarded-For, or the
-    // peer socket IP if none). When it differs from field 11 (Client IP,
-    // the edge-observed peer), this request passed through an upstream
-    // proxy/CDN — worth flagging since IP-based blocking/rate-limiting on
-    // field 11 alone would be acting on the wrong address.
-    const trueClientIp = f[59];
-    if (trueClientIp && trueClientIp !== '-' && trueClientIp !== f[10]) trueClientIpMismatches++;
-
-    totalBytesServed += fnum(f[9]);
+    // Indicators only: a 403 with WAF info is consistent with an edge deny; a
+    // 403 with the 'o' flag means origin was contacted (likely origin-issued).
+    if (status === '403' || status === '429') {
+      if (wafRaw && wafRaw !== '-') blockedWithWaf++;
+      if (os.includes('o')) blockedOriginContacted++;
+    }
+    // Field 60 True-Client-IP vs field 11: differs when a proxy/CDN sits in
+    // front of Akamai, so IP-based analysis on field 11 sees the proxy.
+    const trueClientIp = f[RF.trueClientIp];
+    if (trueClientIp && trueClientIp !== '-' && trueClientIp !== f[RF.clientIp]) trueClientIpMismatches++;
+    totalBytesServed += fnum(f[RF.bytes]);
   }
 
   // timeline bins
-  const NBINS = 30;
   const binWidth = duration / NBINS;
   const binCounts = new Array(NBINS).fill(0);
   const binLat = Array.from({ length: NBINS }, () => []);
   const binBytes = new Array(NBINS).fill(0);
   const binStatus = { '2xx': new Array(NBINS).fill(0), '3xx': new Array(NBINS).fill(0), '4xx': new Array(NBINS).fill(0), '5xx': new Array(NBINS).fill(0) };
   for (const f of rLines) {
-    const t = fnum(f[2]);
-    let idx = Math.min(Math.floor((t - t0) / binWidth), NBINS - 1);
-    if (idx < 0) idx = 0;
+    const idx = binIndexOf(fnum(f[RF.ts]), t0, binWidth);
     binCounts[idx]++;
-    binLat[idx].push(fnum(f[5]));
-    binBytes[idx] += fnum(f[9]);
-    const sb = bucketOf(f[13]);
+    binLat[idx].push(fnum(f[RF.turnaround]));
+    binBytes[idx] += fnum(f[RF.bytes]);
+    const sb = bucketOf(f[RF.status]);
     if (binStatus[sb]) binStatus[sb][idx]++;
   }
-  const binRps = binCounts.map(c => +(c / binWidth).toFixed(4));
-  const binP95 = binLat.map(arr => arr.length ? +pct(arr.slice().sort((a, b) => a - b), 0.95).toFixed(1) : 0);
+  const binRps = binCounts.map((c) => +(c / binWidth).toFixed(4));
+  // Empty bins are null, not 0 ms — a logging gap must not read as fast responses.
+  const binP95 = binLat.map((arr) => (arr.length ? +pct(arr.slice().sort((a, b) => a - b), 0.95).toFixed(1) : null));
+  const multiDay = t1 - t0 > 86400;
   const binLabels = [];
-  for (let i = 0; i < NBINS; i++) {
-    const tmid = (t0 + i * binWidth) * 1000;
-    const d = new Date(tmid);
-    binLabels.push(d.toISOString().slice(11, 16));
-  }
+  for (let i = 0; i < NBINS; i++) binLabels.push(formatUtc(t0 + i * binWidth).slice(multiDay ? 5 : 11, 16));
 
-  // peak rps (max count in any 60s window)
-  let peakCount = 0, left = 0;
-  for (let right = 0; right < ts.length; right++) {
-    while (ts[right] - ts[left] > 60) left++;
-    peakCount = Math.max(peakCount, right - left + 1);
-  }
-  const peakRps = peakCount / 60;
+  const peakRps = peakIn60s(ts) / 60;
 
   // normalized endpoint grouping
-  const latByNorm = new Map();
-  const failByNorm = new Map();
+  const latByEp = new Map(), failByEp = new Map(), epInfo = new Map();
   for (const f of rLines) {
-    const n = normalizeUri(f[12]);
-    if (!latByNorm.has(n)) latByNorm.set(n, []);
-    latByNorm.get(n).push(fnum(f[5]));
-    const b = bucketOf(f[13]);
-    if (b === '4xx' || b === '5xx') failByNorm.set(n, (failByNorm.get(n) || 0) + 1);
+    const key = endpointOf(f, multiHost);
+    if (!epInfo.has(key)) { epInfo.set(key, { host: f[RF.host], path: normalizeUri(f[RF.arl]) }); latByEp.set(key, []); }
+    latByEp.get(key).push(fnum(f[RF.turnaround]));
+    const b = bucketOf(f[RF.status]);
+    if (b === '4xx' || b === '5xx') failByEp.set(key, (failByEp.get(key) || 0) + 1);
   }
+  const epDrill = (key) => { const i = epInfo.get(key); return endpointDrill(i.host, i.path, multiHost); };
   const slowest = [];
-  for (const [n, arr] of latByNorm.entries()) {
+  for (const [key, arr] of latByEp.entries()) {
     if (arr.length >= 2) {
       const sorted = arr.slice().sort((a, b) => a - b);
-      slowest.push({ endpoint: n, p95: +pct(sorted, 0.95).toFixed(1), count: arr.length, avg: +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) });
+      slowest.push({ endpoint: key, p95: +pct(sorted, 0.95).toFixed(1), count: arr.length, avg: +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1), drill: epDrill(key) });
     }
   }
   slowest.sort((a, b) => b.p95 - a.p95);
   const topSlow = slowest.slice(0, 10);
-  const topFail = [...failByNorm.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([endpoint, count]) => ({ endpoint, count }));
+  const topFail = [...failByEp.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([key, count]) => {
+    const d = epDrill(key);
+    return { endpoint: key, count, drill: { rec: 'r', conds: [...d.conds, { field: RF.status, op: 'range', lo: 400, hi: 599 }] } };
+  });
 
-  // IP detail
+  // per-client-IP detail (every IP, so search isn't limited to the top 12)
   const ipDetail = new Map();
   for (const f of rLines) {
-    const ip = f[10];
-    if (!ipDetail.has(ip)) ipDetail.set(ip, { count: 0, statuses: new Map(), reasons: new Map(), uas: new Set(), hosts: new Set(), timestamps: [] });
-    const d = ipDetail.get(ip);
+    const ip = f[RF.clientIp];
+    let d = ipDetail.get(ip);
+    if (!d) { d = { count: 0, statuses: new Map(), reasons: new Map(), uas: new Map(), hosts: new Set(), timestamps: [] }; ipDetail.set(ip, d); }
     d.count++;
-    d.statuses.set(f[13], (d.statuses.get(f[13]) || 0) + 1);
-    d.reasons.set(f[14], (d.reasons.get(f[14]) || 0) + 1);
-    d.uas.add(safeDecode(f[20]).slice(0, 90));
-    d.hosts.add(f[17]);
-    d.timestamps.push(fnum(f[2]));
+    d.statuses.set(f[RF.status], (d.statuses.get(f[RF.status]) || 0) + 1);
+    if (f[RF.error] !== '-') d.reasons.set(f[RF.error], (d.reasons.get(f[RF.error]) || 0) + 1);
+    d.uas.set(f[RF.ua], (d.uas.get(f[RF.ua]) || 0) + 1);
+    d.hosts.add(f[RF.host]);
+    d.timestamps.push(fnum(f[RF.ts]));
   }
-  // Peak rate per IP, same sliding-60s-window algorithm as the global Peak
-  // RPS KPI — surfaces velocity (e.g. an IP ramping up a scan/DoS attempt)
-  // that a flat total-request-count can hide.
-  function peakRequestsIn60s(timestamps) {
-    const ts = timestamps.slice().sort((a, b) => a - b);
-    let peak = 0, left = 0;
-    for (let right = 0; right < ts.length; right++) {
-      while (ts[right] - ts[left] > 60) left++;
-      peak = Math.max(peak, right - left + 1);
-    }
-    return peak;
-  }
-  const ipTable = [...ipDetail.entries()]
+  const ipAll = [...ipDetail.entries()]
     .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 12)
     .map(([ip, d]) => {
-      const blocked = (d.statuses.get('403') || 0) + (d.statuses.get('429') || 0);
-      const topStatus = topCounterEntry(d.statuses)[0];
-      const reasonsSorted = [...d.reasons.entries()].sort((a, b) => b[1] - a[1]);
-      let wafReason = reasonsSorted[0][0];
-      if (wafReason === '-' && reasonsSorted.length > 1) wafReason = reasonsSorted[1][0];
-      return { ip, requests: d.count, blocked, peak_60s: peakRequestsIn60s(d.timestamps), top_status: topStatus, waf_reason: wafReason, hosts: d.hosts.size, ua_sample: [...d.uas][0] || '-' };
+      const topReason = topCounterEntry(d.reasons);
+      const topUa = topCounterEntry(d.uas);
+      return {
+        ip, requests: d.count,
+        blocked: (d.statuses.get('403') || 0) + (d.statuses.get('429') || 0),
+        peak_60s: peakIn60s(d.timestamps.sort((a, b) => a - b)),
+        top_status: topCounterEntry(d.statuses)[0],
+        waf_reason: topReason ? topReason[0] : '-',
+        hosts: d.hosts.size,
+        ua_sample: topUa ? safeDecode(topUa[0]).slice(0, 90) : '-',
+        drill: { rec: 'r', conds: [{ field: RF.clientIp, op: 'eq', value: ip }] },
+      };
     });
+  const ipTable = ipAll.slice(0, 12);
 
-  // security pattern hits
+  // URI pattern heuristics — indicators to look at, not detections.
   const secPatterns = {
-    'Path traversal': /\.\.\/|%2e%2e/i,
-    'SQLi probe': /union(%20|\s)+select|select.+from|'--|%27--|or%201=1/i,
-    'XSS probe': /<script|%3cscript|onerror=/i,
-    'Env/config file scan': /\.env|\.git\/config|next\.config\.js|app-paths-manifest/i
+    'path traversal': /\.\.\/|%2e%2e/i,
+    'SQLi-like': /union(%20|\s)+select|select.+from|'--|%27--|or%201=1/i,
+    'XSS-like': /<script|%3cscript|onerror=/i,
+    'env/config file': /\.env|\.git\/config|next\.config\.js|app-paths-manifest|wp-config\.php|\.aws\/credentials/i,
   };
   const secHits = {};
   for (const name in secPatterns) secHits[name] = 0;
-  for (const f of rLines) for (const name in secPatterns) if (secPatterns[name].test(f[12])) secHits[name]++;
+  for (const f of rLines) for (const name in secPatterns) if (secPatterns[name].test(f[RF.arl])) secHits[name]++;
 
-  // hosts, forward legs
-  const hostCounts = new Map();
-  for (const f of rLines) hostCounts.set(f[17], (hostCounts.get(f[17]) || 0) + 1);
+  // forward legs
   const fStatusCounts = new Map(), fUpstream = new Map();
   for (const f of fLines) {
-    fStatusCounts.set(f[14], (fStatusCounts.get(f[14]) || 0) + 1);
-    fUpstream.set(f[23], (fUpstream.get(f[23]) || 0) + 1);
+    fStatusCounts.set(f[FF.status], (fStatusCounts.get(f[FF.status]) || 0) + 1);
+    fUpstream.set(f[FF.forwardHost], (fUpstream.get(f[FF.forwardHost]) || 0) + 1);
   }
-
-  // Edge IP (field 1, same position on r- and f-lines) and Forward/Origin
-  // IP (field 11 on f-lines) — usually just a handful of unique values per
-  // file, unlike client IPs, so these are safe to geolocate automatically.
+  // Edge IPs (field 1) and forward-target IPs (f-line field 11) — usually a
+  // handful of values per file, so cheap to geolocate once the user opts in.
   const edgeIpSet = new Set();
-  for (const f of rLines) if (f[0] && f[0] !== '-') edgeIpSet.add(f[0]);
-  for (const f of fLines) if (f[0] && f[0] !== '-') edgeIpSet.add(f[0]);
+  for (const f of rLines) if (f[RF.edgeIp] && f[RF.edgeIp] !== '-') edgeIpSet.add(f[RF.edgeIp]);
+  for (const f of fLines) if (f[FF.edgeIp] && f[FF.edgeIp] !== '-') edgeIpSet.add(f[FF.edgeIp]);
   const originIpSet = new Set();
-  for (const f of fLines) if (f[10] && f[10] !== '-') originIpSet.add(f[10]);
+  for (const f of fLines) if (f[FF.forwardIp] && f[FF.forwardIp] !== '-') originIpSet.add(f[FF.forwardIp]);
 
-  const total = rLines.length;
   const count404 = statusCounts.get('404') || 0;
-  const count5xx = statusBuckets['5xx'];
+  // The 5xx KPI and status badge count user-facing errors only: a SureRoute
+  // probe failing (e.g. 502 ERR_FORWARDING_DENIED) is not a user outage. The
+  // status chart and its drill-downs still include them.
+  const count5xx = statusBuckets['5xx'] - sureRoute5xx;
   const blocked403 = statusCounts.get('403') || 0;
   const blocked429 = statusCounts.get('429') || 0;
   const blockedTotal = blocked403 + blocked429;
@@ -949,34 +1208,31 @@ function analyze(rLines, fLines) {
   if (total > 0 && count5xx / total > 0.01) badge = 'CRITICAL';
   else if (count5xx > 0 || (total > 0 && blockedTotal / total > 0.05)) badge = 'WARN';
 
-  // cache hit ratio — see classifyCacheStatus() for how d/i/m/o/s/g/p/n map to these buckets
   const cacheHitPct = total ? (cacheBuckets.hit / total * 100) : 0;
   const cache = {
     hitRatio: cacheHitPct.toFixed(1) + '%',
     hitRatioSub: `${cacheBuckets.hit} hit (d/i/m) of ${total} · ${cacheBuckets.miss} origin fetch · ${cacheBuckets.revalidated} revalidated`,
     good: cacheHitPct >= 60,
-    breakdown: topNEntries(cacheCounts, 6).map(([label, count]) => ({ label, count }))
+    breakdown: topNEntries(cacheCounts, 6).map(([label, count]) => ({ label, count, drill: { rec: 'r', conds: [{ field: RF.objStatus, op: 'eq', value: label }] } })),
   };
-
-  // bandwidth
   const bandwidth = { totalBytesLabel: humanBytes(totalBytesServed), perBin: binBytes };
-
-  // content-type distribution
-  const contentType = topNEntries(ctCounts, 7).map(([label, count]) => ({ label, count }));
-
-  // WAF info coverage + top tokenized signals
+  const contentType = topNEntries(ctCounts, 7).map(([label, count]) => ({
+    label, count,
+    drill: { rec: 'r', conds: [{ field: RF.contentType, op: 're', value: label === '-' ? '^-?([;,].*)?$' : `^${reEscape(label)}([;,].*)?$` }] },
+  }));
   const wafCoveragePct = total ? (wafHitRequests / total * 100) : 0;
   const topWafSignal = topCounterEntry(wafTokenCounts);
   const waf = {
     coverage: wafCoveragePct.toFixed(1) + '%',
     coverageSub: `${wafHitRequests} of ${total} requests carried WAF info`,
-    topSignals: topNEntries(wafTokenCounts, 8).map(([signal, count]) => ({ signal, count }))
+    topSignals: topNEntries(wafTokenCounts, 8).map(([signal, count]) => ({
+      signal, count,
+      drill: { rec: 'r', conds: [{ field: RF.waf, op: 'ne', value: '-' }, { field: RF.waf, op: 're', value: `^(.*\\|)?${reEscape(signal)}\\|*$` }] },
+    })),
   };
 
-  // log-coverage gap detection: the largest silence between two consecutive
-  // requests. A gap that's a big fraction of the total window can mean the
-  // "quiet period" around an incident is actually a logging hole, not real
-  // silence.
+  // Largest silence between consecutive requests: a big one relative to the
+  // window often means missing logs, not missing traffic.
   let largestGapSec = 0, largestGapStart = t0;
   for (let i = 1; i < ts.length; i++) {
     const gap = ts[i] - ts[i - 1];
@@ -985,71 +1241,125 @@ function analyze(rLines, fLines) {
   const coverageGap = {
     seconds: Math.round(largestGapSec),
     pctOfWindow: duration > 0 ? +(largestGapSec / duration * 100).toFixed(1) : 0,
-    startStr: ts.length > 1 ? new Date(largestGapStart * 1000).toISOString().replace('T', ' ').slice(0, 19) : null
+    startStr: ts.length > 1 ? formatUtc(largestGapStart) : null,
   };
 
   const rawCounts = {};
   for (const [k, v] of [...statusCounts.entries()].sort()) rawCounts[`Status ${k}`] = v;
   for (const [k, v] of methodCounts.entries()) rawCounts[`Method ${k}`] = v;
-  rawCounts['Security: env/config file scan attempts'] = secHits['Env/config file scan'];
-  rawCounts['Security: encoded path-traversal attempts'] = secHits['Path traversal'];
-  rawCounts['Security: SQLi probes detected'] = secHits['SQLi probe'];
-  rawCounts['Security: XSS probes detected'] = secHits['XSS probe'];
+  for (const name in secHits) rawCounts[`URI pattern match (heuristic): ${name}`] = secHits[name];
   rawCounts['Cache: hit ratio'] = cache.hitRatio;
   rawCounts['Cache: unknown/no cache-status data'] = cacheBuckets.unknown;
   rawCounts['Bandwidth: total bytes served'] = bandwidth.totalBytesLabel;
   rawCounts['WAF: requests carrying WAF info'] = wafHitRequests;
-  if (topWafSignal) rawCounts['WAF: top signal token'] = `${topWafSignal[0]} (${topWafSignal[1]})`;
-  rawCounts['Security: True Client IP differs from edge Client IP'] = trueClientIpMismatches;
+  if (topWafSignal) rawCounts['WAF: top rule name'] = `${topWafSignal[0]} (${topWafSignal[1]})`;
+  rawCounts['403/429 with WAF info'] = blockedWithWaf;
+  rawCounts['403/429 with origin contacted (o flag)'] = blockedOriginContacted;
+  rawCounts['True-Client-IP differs from client IP (proxy in path?)'] = trueClientIpMismatches;
+  rawCounts['SureRoute test-object requests'] = sureRouteProbes;
+  rawCounts['SureRoute test-object 5xx (excluded from 5xx KPI and status badge)'] = sureRoute5xx;
   if (coverageGap.seconds > 0) {
     rawCounts['Log coverage: largest gap between requests'] = `${humanDuration(coverageGap.seconds)} (${coverageGap.pctOfWindow}% of window)${coverageGap.startStr ? ', starting ' + coverageGap.startStr + ' UTC' : ''}`;
   }
-  for (const [k, v] of [...fUpstream.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)) rawCounts[`Origin upstream: ${k}`] = v;
+  for (const [k, v] of [...fStatusCounts.entries()].sort((a, b) => b[1] - a[1])) rawCounts[`Forward-leg status ${k}`] = v;
+  for (const [k, v] of [...fUpstream.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)) rawCounts[`Forward host: ${k}`] = v;
 
-  const startStr = new Date(t0 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  const endStr = new Date(t1 * 1000).toISOString().replace('T', ' ').slice(0, 19);
   const durHrs = (duration / 3600).toFixed(1);
-
+  const pctOf = (n) => (total ? (n / total * 100).toFixed(1) : '0.0');
   return {
     meta: {
-      title: `Edge Log Analysis — Uploaded Data`,
-      subtitle: `Observed window: ${startStr} → ${endStr} UTC (≈${durHrs}h) · ${total} client-facing requests · ${fLines.length} origin/forward legs`,
-      statusBadge: badge
+      title: 'Edge Log Analysis — Uploaded Data',
+      subtitle: `Observed window: ${formatUtc(t0)} → ${formatUtc(t1)} UTC (≈${durHrs}h) · ${total} client-facing requests · ${fLines.length} forward legs`,
+      statusBadge: badge,
     },
     kpis: {
-      total, totalSub: `+${fLines.length} origin-leg records`,
-      rate404: total ? (count404 / total * 100).toFixed(1) + '%' : '0.0%',
+      total, totalSub: `+${fLines.length} forward-leg records`,
+      rate404: pctOf(count404) + '%',
       rate404Sub: `${count404} of ${total}`, good404: count404 === 0,
-      count5xx, count5xxSub: count5xx === 0 ? 'no server errors observed' : `${(count5xx / total * 100).toFixed(1)}% of requests`, good5xx: count5xx === 0,
+      count5xx,
+      count5xxSub: (count5xx === 0 ? 'no server errors observed' : `${pctOf(count5xx)}% of requests`) + (sureRoute5xx ? ` · ${sureRoute5xx} SureRoute probe 5xx excluded` : ''),
+      good5xx: count5xx === 0,
       p95: Math.round(latency.p95) + 'ms',
       p95Sub: `p50 ${Math.round(latency.p50)}ms · p99 ${Math.round(latency.p99)}ms · max ${Math.round(latency.max)}ms`,
       peakRps: peakRps.toFixed(2),
       blocks: blockedTotal,
-      blocksSub: `${blocked403}×403 + ${blocked429}×429 (${total ? (blockedTotal / total * 100).toFixed(1) : '0.0'}%)`
+      blocksSub: `${blocked403}×403 + ${blocked429}×429 (${pctOf(blockedTotal)}%) · ${blockedWithWaf} with WAF info · ${blockedOriginContacted} origin-contacted`,
     },
     turnaround: {
-      clientEdge: { p50: Math.round(latency.p50), p95: Math.round(latency.p95), avg: Math.round(latency.avg) },
-      edgeOrigin: { p50: Math.round(originLatency.p50), p95: Math.round(originLatency.p95), avg: Math.round(originLatency.avg) },
-      hasOriginData: fLines.length > 0
+      cache: latencyStats(latCache),
+      contacted: latencyStats(latContacted),
+      forward: latencyStats(fLines.map((f) => fnum(f[FF.turnaround]))),
     },
     infra: { edgeIps: [...edgeIpSet], originIps: [...originIpSet] },
-    timeline: { labels: binLabels, rps: binRps, p95: binP95, status2xx: binStatus['2xx'], status3xx: binStatus['3xx'], status4xx: binStatus['4xx'], status5xx: binStatus['5xx'] },
+    timeline: { labels: binLabels, counts: binCounts, rps: binRps, p95: binP95, status2xx: binStatus['2xx'], status3xx: binStatus['3xx'], status4xx: binStatus['4xx'], status5xx: binStatus['5xx'], t0, t1, binWidth },
     cache,
     bandwidth,
     contentType,
     waf,
     coverageGap,
     statusBuckets: { '2xx': statusBuckets['2xx'], '3xx': statusBuckets['3xx'], '4xx': statusBuckets['4xx'], '5xx': statusBuckets['5xx'] },
-    statusHint: `${total} client-facing requests`,
-    failHint: count404 === 0 && count5xx === 0
-      ? '404 + 5xx = 0 in this dataset — shown instead: 4xx (client-error / blocked) by normalized endpoint'
-      : 'Top endpoints by combined 404 + 5xx count',
+    statusHint: `${total} client-facing requests${sureRoute5xx ? ` (the 5xx slice includes ${sureRoute5xx} SureRoute probe error(s))` : ''} — click a slice to see its lines`,
+    failHint: '4xx + 5xx responses by normalized endpoint (403/429 blocks included) — click a bar to see its lines',
     topFail,
     topSlow,
     ipTable,
-    rawCounts
+    ipAll,
+    rawCounts,
   };
 }
+
+const GROUP_DIMS = [
+  { id: 'edgeIp', label: 'Edge IP', rec: 'r', field: RF.edgeIp },
+  { id: 'fwdIp', label: 'Forward target IP (f-lines)', rec: 'f', field: FF.forwardIp },
+  { id: 'fwdHost', label: 'Forward hostname (f-lines)', rec: 'f', field: FF.forwardHost },
+  { id: 'fwdStatus', label: 'Forward-leg status (f-lines)', rec: 'f', field: FF.status },
+  { id: 'fwdError', label: 'Forward-leg error (f-lines)', rec: 'f', field: FF.error },
+  { id: 'host', label: 'Host header', rec: 'r', field: RF.host },
+  { id: 'endpoint', label: 'Endpoint (normalized)', rec: 'r', special: 'endpoint' },
+  { id: 'status', label: 'Status code', rec: 'r', field: RF.status },
+  { id: 'error', label: 'Error reason', rec: 'r', field: RF.error },
+  { id: 'objStatus', label: 'Object status (cache flags)', rec: 'r', field: RF.objStatus },
+  { id: 'clientIp', label: 'Client IP', rec: 'r', field: RF.clientIp },
+  { id: 'trueClientIp', label: 'True-Client-IP', rec: 'r', field: RF.trueClientIp },
+];
+function groupBy(rLines, fLines, dimId) {
+  const dim = GROUP_DIMS.find((d) => d.id === dimId);
+  const rows = dim.rec === 'r' ? rLines : fLines;
+  const S = dim.rec === 'r' ? RF : FF;
+  const isEndpoint = dim.special === 'endpoint';
+  let multiHost = false;
+  if (isEndpoint) { const hs = new Set(); for (const f of rLines) hs.add(f[RF.host]); multiHost = hs.size > 1; }
+  const groups = new Map();
+  for (const f of rows) {
+    const key = isEndpoint ? endpointOf(f, multiHost) : f[dim.field];
+    let g = groups.get(key);
+    if (!g) {
+      g = { key, n: 0, c4: 0, c5: 0, c0: 0, lat: [], first: Infinity, last: -Infinity, host: f[RF.host], path: isEndpoint ? normalizeUri(f[RF.arl]) : null };
+      groups.set(key, g);
+    }
+    g.n++;
+    const st = f[S.status];
+    const b = bucketOf(st);
+    if (b === '4xx') g.c4++;
+    else if (b === '5xx') g.c5++;
+    else if (st === '-' || parseInt(st, 10) === 0) g.c0++;
+    g.lat.push(fnum(f[S.turnaround]));
+    const t = fnum(f[S.ts]);
+    if (t < g.first) g.first = t;
+    if (t > g.last) g.last = t;
+  }
+  const total = rows.length || 1;
+  return [...groups.values()].map((g) => {
+    const ls = latencyStats(g.lat);
+    return {
+      key: g.key, n: g.n, share: g.n / total * 100,
+      r4: g.c4 / g.n * 100, r5: g.c5 / g.n * 100, r0: g.c0 / g.n * 100,
+      p50: ls.p50, p95: ls.p95, first: g.first, last: g.last,
+      drill: isEndpoint ? endpointDrill(g.host, g.path, multiHost) : { rec: dim.rec, conds: [{ field: dim.field, op: 'eq', value: g.key }] },
+    };
+  }).sort((a, b) => b.n - a.n);
+}
+/* @testable:end */
 
 /* ---------- Chart + DOM rendering ---------- */
 const css = getComputedStyle(document.documentElement);
@@ -1060,7 +1370,7 @@ Chart.defaults.borderColor = colorVar('--gridline');
 const gridOpt = { color: colorVar('--gridline'), drawTicks: false };
 const tickColor = colorVar('--text-muted');
 
-let currentIpTable = [];
+let currentIpTable = [], currentIpAll = [];
 let sortKey = 'requests', sortDir = -1;
 
 const rpsChart = new Chart(document.getElementById('rpsChart'), {
@@ -1148,32 +1458,61 @@ function statusPillClass(s) {
   if (n >= 300 && n < 400) return 'pill s3';
   return 'pill s4';
 }
+
+// Drill specs, index-aligned with each chart's current data.
+const chartDrills = { fail: [], slow: [], cache: [], ct: [], waf: [] };
+const STATUS_CLASSES = ['2xx', '3xx', '4xx', '5xx'];
+function attachClick(chart, mode, handler) {
+  const hits = (evt) => chart.getElementsAtEventForMode(evt, mode, { intersect: mode !== 'index' }, false);
+  chart.options.onClick = (evt) => { const els = hits(evt); if (els.length) handler(els[0].index); };
+  chart.options.onHover = (evt) => { evt.native.target.style.cursor = hits(evt).length ? 'pointer' : 'default'; };
+}
+for (const c of [rpsChart, latChart, statusTimeChart, bandwidthChart]) attachClick(c, 'index', (i) => zoomToBin(i));
+attachClick(failChart, 'nearest', (i) => drillDown(chartDrills.fail[i], `4xx/5xx on ${failChart.data.labels[i]}`));
+attachClick(slowChart, 'nearest', (i) => drillDown(chartDrills.slow[i], slowChart.data.labels[i]));
+attachClick(cacheChart, 'nearest', (i) => drillDown(chartDrills.cache[i], `object status ${cacheChart.data.labels[i]}`));
+attachClick(contentTypeChart, 'nearest', (i) => drillDown(chartDrills.ct[i], `content-type ${contentTypeChart.data.labels[i]}`));
+attachClick(wafChart, 'nearest', (i) => drillDown(chartDrills.waf[i], `WAF rule ${wafFullLabels[i]}`));
+attachClick(statusChart, 'nearest', (i) => drillDown(chartDrills.status ? statusClassDrill(STATUS_CLASSES[i]) : null, `${STATUS_CLASSES[i]} responses`));
+
 function renderTable() {
-  const filter = document.getElementById('ipFilter').value.toLowerCase();
-  const rows = currentIpTable
-    .filter(r => Object.values(r).join(' ').toLowerCase().includes(filter))
-    .sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : -1) * sortDir);
-  document.querySelector('#ipTable tbody').innerHTML = rows.map(r => `
+  const filter = document.getElementById('ipFilter').value.trim().toLowerCase();
+  const source = filter ? currentIpAll : currentIpTable;
+  const matched = filter
+    ? source.filter((r) => [r.ip, r.top_status, r.waf_reason, r.ua_sample].join(' ').toLowerCase().includes(filter))
+    : source.slice();
+  matched.sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : -1) * sortDir);
+  const shown = matched.slice(0, 200);
+  let html = shown.map((r) => `
     <tr>
-      <td>${r.ip}</td>
-      <td>${r.requests}</td>
-      <td>${r.peak_60s}</td>
-      <td>${r.blocked}</td>
-      <td><span class="${statusPillClass(r.top_status)}">${r.top_status}</span></td>
-      <td>${r.waf_reason}</td>
-      <td>${r.hosts}</td>
-      <td style="color:var(--text-muted); font-size:12px;">${r.ua_sample}</td>
+      <td><button class="drill-link" data-ip-drill="${escapeHtml(r.ip)}">${escapeHtml(r.ip)}</button></td>
+      <td>${escapeHtml(r.requests)}</td>
+      <td>${escapeHtml(r.peak_60s)}</td>
+      <td>${escapeHtml(r.blocked)}</td>
+      <td><span class="${statusPillClass(r.top_status)}">${escapeHtml(r.top_status)}</span></td>
+      <td>${escapeHtml(r.waf_reason)}</td>
+      <td>${escapeHtml(r.hosts)}</td>
+      <td style="color:var(--text-muted); font-size:12px;">${escapeHtml(r.ua_sample)}</td>
       <td style="font-size:12px;">${ipLocationCellHtml(r.ip)}</td>
     </tr>
   `).join('');
+  if (filter && !matched.length) html = `<tr><td colspan="9" class="muted">No client IP matches "${escapeHtml(filter)}" in the current range.</td></tr>`;
+  else if (matched.length > shown.length) html += `<tr><td colspan="9" class="muted">Showing ${shown.length} of ${matched.length} matching IPs — narrow the search to see the rest.</td></tr>`;
+  document.querySelector('#ipTable tbody').innerHTML = html;
 }
 function ipLocationCellHtml(ip) {
   const cached = geoCache.get(ip);
-  if (!cached) return `<a class="geo-link" data-geo-ip="${ip}">Look up</a>`;
+  if (!cached) return `<a class="geo-link" data-geo-ip="${escapeHtml(ip)}">Look up</a>`;
   if (typeof cached.then === 'function') return `<span style="color:var(--text-muted);">looking up…</span>`;
-  return `<span style="${cached.status === 'error' ? 'color:var(--text-muted);' : ''}">${geoResultText(cached)}</span>`;
+  return `<span style="${cached.status === 'error' ? 'color:var(--text-muted);' : ''}">${escapeHtml(geoResultText(cached))}</span>`;
 }
 document.querySelector('#ipTable tbody').addEventListener('click', async (e) => {
+  const drill = e.target.closest('[data-ip-drill]');
+  if (drill) {
+    const ip = drill.dataset.ipDrill;
+    drillDown({ rec: 'r', conds: [{ field: RF.clientIp, op: 'eq', value: ip }] }, `client IP ${ip}`);
+    return;
+  }
   const link = e.target.closest('[data-geo-ip]');
   if (!link) return;
   const ip = link.dataset.geoIp;
@@ -1192,23 +1531,145 @@ document.querySelectorAll('#ipTable th').forEach(th => {
 });
 document.getElementById('ipFilter').addEventListener('input', renderTable);
 
+/* ---------- Breakdown by dimension ---------- */
+const GB_MAX_ROWS = 100;
+let gbRows = [], gbShown = [], gbSortKey = 'n', gbSortDir = -1;
+const gbDimSelect = document.getElementById('groupByDim');
+const gbSearch = document.getElementById('groupBySearch');
+gbDimSelect.innerHTML = GROUP_DIMS.map((d) => `<option value="${d.id}">${escapeHtml(d.label)}</option>`).join('');
+function fmtPct(v) { return v === 0 ? '0' : v < 0.1 ? '<0.1%' : v.toFixed(1) + '%'; }
+function refreshGroupBy() {
+  gbRows = currentScopeLines ? groupBy(currentScopeLines.rLines, currentScopeLines.fLines, gbDimSelect.value) : [];
+  renderGroupBy();
+}
+function renderGroupBy() {
+  const tbody = document.querySelector('#groupByTable tbody');
+  const note = document.getElementById('groupByNote');
+  if (!currentScopeLines) {
+    gbShown = [];
+    tbody.innerHTML = '<tr><td colspan="10" class="muted">Upload or paste a log to break it down by dimension — the sample dashboard has no raw lines behind it.</td></tr>';
+    note.textContent = '';
+    return;
+  }
+  const q = gbSearch.value.trim().toLowerCase();
+  const matched = q ? gbRows.filter((r) => String(r.key).toLowerCase().includes(q)) : gbRows.slice();
+  matched.sort((a, b) => {
+    const av = a[gbSortKey], bv = b[gbSortKey];
+    if (av === bv) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    return (av > bv ? 1 : -1) * gbSortDir;
+  });
+  gbShown = matched.slice(0, GB_MAX_ROWS);
+  tbody.innerHTML = gbShown.map((r, i) => `
+    <tr>
+      <td class="key">${escapeHtml(r.key)}</td>
+      <td class="num">${r.n}</td>
+      <td class="num">${fmtPct(r.share)}</td>
+      <td class="num">${fmtPct(r.r4)}</td>
+      <td class="num">${fmtPct(r.r5)}</td>
+      <td class="num">${fmtPct(r.r0)}</td>
+      <td class="num">${r.p50 ?? '—'}</td>
+      <td class="num">${r.p95 ?? '—'}</td>
+      <td class="muted" style="font-size:12px; white-space:nowrap;">${formatUtc(r.first).slice(5)} → ${formatUtc(r.last).slice(5)}</td>
+      <td><button class="drill-link" data-gb-idx="${i}">lines</button></td>
+    </tr>`).join('') || '<tr><td colspan="10" class="muted">No groups match.</td></tr>';
+  const dim = GROUP_DIMS.find((d) => d.id === gbDimSelect.value);
+  note.textContent = `${matched.length} group(s)${q ? ' matching' : ''}${matched.length > GB_MAX_ROWS ? `, showing the first ${GB_MAX_ROWS}` : ''} · `
+    + `${dim.rec === 'f' ? 'forward legs; latency = f-line turnaround (field 7)' : 'client requests; latency = r-line turnaround (field 6)'}`
+    + ` · p95 shown only for groups with ≥ ${MIN_N_FOR_P95} requests.`;
+}
+gbDimSelect.addEventListener('change', refreshGroupBy);
+gbSearch.addEventListener('input', renderGroupBy);
+document.querySelectorAll('#groupByTable th').forEach((th) => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (!key) return;
+    gbSortDir = (gbSortKey === key) ? -gbSortDir : (key === 'key' || key === 'first' ? 1 : -1);
+    gbSortKey = key;
+    renderGroupBy();
+  });
+});
+document.querySelector('#groupByTable tbody').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-gb-idx]');
+  if (!btn) return;
+  const row = gbShown[parseInt(btn.dataset.gbIdx, 10)];
+  if (row) drillDown(row.drill, `${gbDimSelect.selectedOptions[0].textContent} = ${row.key}`);
+});
+
+/* ---------- Drill-down and bin zoom ---------- */
+// Every drill-down is an ordinary Custom Query: the AWK is visible, editable,
+// savable and reproducible by anyone with the same file.
+function drillDown(spec, label) {
+  const statusEl = document.getElementById('queryStatus');
+  const card = document.getElementById('customQueryCard');
+  if (!spec || !currentRawLines.length) {
+    statusEl.style.color = 'var(--critical)';
+    statusEl.textContent = 'Drill-down needs an uploaded or pasted log — the sample dashboard has no raw lines behind it.';
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  document.getElementById('advancedQuery').open = true;
+  document.getElementById('queryInput').value = buildDrillQuery(spec, { includeS: datasetHasS() });
+  runCustomQuery(label);
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function zoomToBin(i) {
+  const tl = lastAnalyzeResult && lastAnalyzeResult.timeline;
+  if (!fullRLines.length || !tl || tl.t0 === undefined) {
+    setStatus('Zooming needs an uploaded or pasted log — the sample dashboard has no raw lines behind it.', 'error');
+    return;
+  }
+  if (!tl.counts[i]) {
+    document.getElementById('rangeStatus').textContent = 'That bin has no requests — nothing to zoom into.';
+    return;
+  }
+  const from = tl.t0 + i * tl.binWidth;
+  const to = Math.min(tl.t0 + (i + 1) * tl.binWidth, tl.t1);
+  activeTimeRange = { kind: 'bin', t0: tl.t0, t1: tl.t1, binWidth: tl.binWidth, idx: i, from, to };
+  setRangeInputs(from, to);
+  refreshDashboard();
+  document.getElementById('rangeBadge').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function emptyResult(subtitle) {
+  const none = { n: 0, p50: null, p95: null, avg: null };
+  return {
+    meta: { title: 'Edge Log Analysis — No Data', subtitle, statusBadge: 'NODATA' },
+    kpis: { total: 0, totalSub: '—', rate404: '—', rate404Sub: '—', good404: null, count5xx: '—', count5xxSub: '—', good5xx: null, p95: '—', p95Sub: '—', peakRps: '—', blocks: '—', blocksSub: '—' },
+    turnaround: { cache: none, contacted: none, forward: none },
+    infra: { edgeIps: [], originIps: [] },
+    timeline: { labels: [], counts: [], rps: [], p95: [], status2xx: [], status3xx: [], status4xx: [], status5xx: [] },
+    cache: { hitRatio: '—', hitRatioSub: '—', good: null, breakdown: [] },
+    bandwidth: { totalBytesLabel: '—', perBin: [] },
+    contentType: [],
+    waf: { coverage: '—', coverageSub: '—', topSignals: [] },
+    statusBuckets: { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0 },
+    statusHint: 'No client-facing requests in scope',
+    failHint: 'No client-facing requests in scope',
+    topFail: [], topSlow: [], ipTable: [], ipAll: [], rawCounts: {},
+  };
+}
+
 let lastAnalyzeResult = null;
+function kpiClass(good) { return 'card kpi' + (good === true ? ' good' : good === false ? ' warn' : ''); }
+function fmtMs(v) { return v === null || v === undefined ? '—' : v + 'ms'; }
 function renderAll(d) {
   lastAnalyzeResult = d;
   document.getElementById('pageTitle').childNodes[0].nodeValue = `Edge Log Analysis — ${d.meta.title.replace('Edge Log Analysis — ', '')} `;
   document.getElementById('pageSubtitle').textContent = d.meta.subtitle;
   const badgeEl = document.getElementById('statusBadge');
-  badgeEl.textContent = d.meta.statusBadge;
+  badgeEl.textContent = d.meta.statusBadge === 'NODATA' ? 'NO DATA' : d.meta.statusBadge;
   badgeEl.className = 'badge ' + d.meta.statusBadge;
 
   document.getElementById('kpiTotal').textContent = d.kpis.total;
   document.getElementById('kpiTotalSub').textContent = d.kpis.totalSub;
   document.getElementById('kpi404').textContent = d.kpis.rate404;
   document.getElementById('kpi404Sub').textContent = d.kpis.rate404Sub;
-  document.getElementById('kpi404Card').className = 'card kpi ' + (d.kpis.good404 ? 'good' : 'warn');
+  document.getElementById('kpi404Card').className = kpiClass(d.kpis.good404);
   document.getElementById('kpi5xx').textContent = d.kpis.count5xx;
   document.getElementById('kpi5xxSub').textContent = d.kpis.count5xxSub;
-  document.getElementById('kpi5xxCard').className = 'card kpi ' + (d.kpis.good5xx ? 'good' : 'warn');
+  document.getElementById('kpi5xxCard').className = kpiClass(d.kpis.good5xx);
   document.getElementById('kpiP95').textContent = d.kpis.p95;
   document.getElementById('kpiP95Sub').textContent = d.kpis.p95Sub;
   document.getElementById('kpiPeakRps').textContent = d.kpis.peakRps;
@@ -1217,24 +1678,21 @@ function renderAll(d) {
 
   document.getElementById('kpiCacheHitRatio').textContent = d.cache.hitRatio;
   document.getElementById('kpiCacheHitRatioSub').textContent = d.cache.hitRatioSub;
-  document.getElementById('kpiCacheCard').className = 'card kpi ' + (d.cache.good ? 'good' : 'warn');
+  document.getElementById('kpiCacheCard').className = kpiClass(d.cache.good);
   document.getElementById('kpiBytesServed').textContent = d.bandwidth.totalBytesLabel;
   document.getElementById('kpiWafCoverage').textContent = d.waf.coverage;
   document.getElementById('kpiWafCoverageSub').textContent = d.waf.coverageSub;
 
-  document.getElementById('ceP50').textContent = d.turnaround.clientEdge.p50 + 'ms';
-  document.getElementById('ceP95').textContent = d.turnaround.clientEdge.p95 + 'ms';
-  document.getElementById('ceAvg').textContent = d.turnaround.clientEdge.avg + 'ms';
-  if (d.turnaround.hasOriginData) {
-    document.getElementById('eoP50').textContent = d.turnaround.edgeOrigin.p50 + 'ms';
-    document.getElementById('eoP95').textContent = d.turnaround.edgeOrigin.p95 + 'ms';
-    document.getElementById('eoAvg').textContent = d.turnaround.edgeOrigin.avg + 'ms';
-    document.getElementById('turnaroundHint').textContent = 'Client↔Edge (r-line turnaround time) vs. Edge↔Origin (f-line turnaround time) — isolates whether a slowdown is Akamai-side or origin-side.';
-  } else {
-    document.getElementById('eoP50').textContent = '-';
-    document.getElementById('eoP95').textContent = '-';
-    document.getElementById('eoAvg').textContent = '-';
-    document.getElementById('turnaroundHint').textContent = 'Client↔Edge (r-line turnaround time) shown below. No origin/forward (f-type) records in this file, so Edge↔Origin can\'t be computed.';
+  const turnGroups = [
+    ['tc', d.turnaround.cache, 'd/i/m flags, no o/g/p'],
+    ['to', d.turnaround.contacted, 'o/g/p flag: origin or peer contacted'],
+    ['tf', d.turnaround.forward, 'origin or parent tier'],
+  ];
+  for (const [prefix, g, desc] of turnGroups) {
+    document.getElementById(prefix + 'P50').textContent = fmtMs(g.p50);
+    document.getElementById(prefix + 'P95').textContent = fmtMs(g.p95);
+    document.getElementById(prefix + 'Avg').textContent = fmtMs(g.avg);
+    document.getElementById(prefix + 'N').textContent = `n = ${g.n} · ${desc}`;
   }
   renderInfraLocations(d.infra);
 
@@ -1252,6 +1710,7 @@ function renderAll(d) {
   cacheChart.data.labels = d.cache.breakdown.map(x => x.label);
   cacheChart.data.datasets[0].data = d.cache.breakdown.map(x => x.count);
   cacheChart.update();
+  chartDrills.cache = d.cache.breakdown.map(x => x.drill);
 
   statusTimeChart.data.labels = d.timeline.labels;
   statusTimeChart.data.datasets[0].data = d.timeline.status2xx;
@@ -1262,31 +1721,47 @@ function renderAll(d) {
 
   statusChart.data.datasets[0].data = [d.statusBuckets['2xx'], d.statusBuckets['3xx'], d.statusBuckets['4xx'], d.statusBuckets['5xx']];
   statusChart.update();
+  chartDrills.status = d.timeline.t0 !== undefined;
   document.getElementById('statusHint').textContent = d.statusHint;
 
   failChart.data.labels = d.topFail.map(x => x.endpoint);
   failChart.data.datasets[0].data = d.topFail.map(x => x.count);
   failChart.update();
+  chartDrills.fail = d.topFail.map(x => x.drill);
   document.getElementById('failHint').textContent = d.failHint;
 
   contentTypeChart.data.labels = d.contentType.map(x => x.label);
   contentTypeChart.data.datasets[0].data = d.contentType.map(x => x.count);
   contentTypeChart.update();
+  chartDrills.ct = d.contentType.map(x => x.drill);
 
   wafFullLabels = d.waf.topSignals.map(x => x.signal);
   wafChart.data.labels = d.waf.topSignals.map(x => x.signal.length > 28 ? x.signal.slice(0, 28) + '…' : x.signal);
   wafChart.data.datasets[0].data = d.waf.topSignals.map(x => x.count);
   wafChart.update();
+  chartDrills.waf = d.waf.topSignals.map(x => x.drill);
 
   slowChart.data.labels = d.topSlow.map(x => `${x.endpoint} (n=${x.count})`);
   slowChart.data.datasets[0].data = d.topSlow.map(x => x.p95);
   slowChart.update();
+  chartDrills.slow = d.topSlow.map(x => x.drill);
 
   currentIpTable = d.ipTable;
+  currentIpAll = d.ipAll || d.ipTable;
   renderTable();
 
-  document.getElementById('rawTable').innerHTML = Object.entries(d.rawCounts)
-    .map(([k, v]) => `<tr><td>${k}</td><td style="font-variant-numeric:tabular-nums;">${v}</td></tr>`).join('');
+  const rows = [];
+  if (d.parseReport) {
+    const rep = d.parseReport;
+    rows.push(['Parse: non-empty lines read', rep.totalLines], ['Parse: client requests (r) accepted', rep.r], ['Parse: client requests (S) accepted', rep.S], ['Parse: forward legs (f) accepted', rep.f]);
+    for (const [k, n] of Object.entries(rep.skipped)) if (n) rows.push([`Parse: skipped — ${SKIP_REASONS[k]}`, n]);
+    if (rep.duplicates) rows.push(['Parse: exact duplicate lines removed', rep.duplicates]);
+  }
+  rows.push(...Object.entries(d.rawCounts));
+  document.getElementById('rawTable').innerHTML = rows
+    .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="font-variant-numeric:tabular-nums;">${escapeHtml(v)}</td></tr>`).join('');
+  document.getElementById('downloadSkippedBtn').style.display = lastSkippedLines.length ? 'inline-flex' : 'none';
+  refreshGroupBy();
 }
 
 /* ---------- Mini AWK-subset interpreter + shell-pipe simulator ---------- */
@@ -1294,8 +1769,10 @@ function renderAll(d) {
    == != ~ !~ < <= > >= && || !, string concatenation by juxtaposition,
    a single `pattern {print ...}` rule. Pipeline stages after the awk
    program: sort [-n -r -u], uniq [-c], head/tail [-N | -n N],
-   grep [-v -i] PATTERN, wc -l. Runs entirely client-side, no server. */
+   grep [-v -i -E -F -c] PATTERN, wc -l. Unsupported options are rejected
+   instead of silently ignored. Runs entirely client-side, no server. */
 
+/* @testable:begin */
 function awkSplitTopLevel(str, sep) {
   const parts = [];
   let cur = '', quote = null;
@@ -1344,7 +1821,8 @@ function lexAwk(src) {
     if (c === '"') {
       i++; let s = '';
       while (i < n && src[i] !== '"') {
-        if (src[i] === '\\' && i + 1 < n) { const e = src[i + 1]; s += e === 't' ? '\t' : e === 'n' ? '\n' : e === '\\' ? '\\' : e === '"' ? '"' : e; i += 2; }
+        if (src[i] === '\\' && src[i + 1] === 'x' && /^[0-9a-fA-F]{2}$/.test(src.slice(i + 2, i + 4))) { s += String.fromCharCode(parseInt(src.slice(i + 2, i + 4), 16)); i += 4; }
+        else if (src[i] === '\\' && i + 1 < n) { const e = src[i + 1]; s += e === 't' ? '\t' : e === 'n' ? '\n' : e === '\\' ? '\\' : e === '"' ? '"' : e; i += 2; }
         else { s += src[i]; i++; }
       }
       if (src[i] !== '"') throw new Error('Unterminated string literal');
@@ -1402,23 +1880,33 @@ function parseAwkProgram(src) {
   function parseAnd() { let left = parseComparison(); while (peek().type === '&&') { next(); left = { kind: 'and', left, right: parseComparison() }; } return left; }
   function parseOr() { let left = parseAnd(); while (peek().type === '||') { next(); left = { kind: 'or', left, right: parseAnd() }; } return left; }
 
-  let pattern = null, action = null;
-  if (peek().type !== '{') pattern = parseOr();
-  if (peek().type === '{') {
-    next();
-    if (peek().type === 'PRINT') {
-      next(); const args = [];
-      if (peek().type !== '}' && peek().type !== ';') { args.push(parseOr()); while (peek().type === ',') { next(); args.push(parseOr()); } }
-      action = { kind: 'print', args };
-    } else if (peek().type === '}') { action = { kind: 'noop' }; }
-    else throw new Error('Only `print` statements are supported inside { }');
-    if (peek().type === ';') next();
-    expect('}');
+  function parseRule() {
+    let pattern = null, action = null;
+    if (peek().type !== '{') pattern = parseOr();
+    if (peek().type === '{') {
+      next();
+      if (peek().type === 'PRINT') {
+        next(); const args = [];
+        if (peek().type !== '}' && peek().type !== ';') { args.push(parseOr()); while (peek().type === ',') { next(); args.push(parseOr()); } }
+        action = { kind: 'print', args };
+      } else if (peek().type === '}') { action = { kind: 'noop' }; }
+      else throw new Error('Only `print` statements are supported inside { }');
+      if (peek().type === ';') next();
+      expect('}');
+    }
+    if (pattern && !action) action = { kind: 'print', args: [] };
+    if (!pattern && action) pattern = { kind: 'num', value: 1 };
+    return { pattern, action };
   }
-  if (!pattern && !action) throw new Error('Empty awk program');
-  if (pattern && !action) action = { kind: 'print', args: [] };
-  if (!pattern && action) pattern = { kind: 'num', value: 1 };
-  return { pattern, action };
+  // Like real awk, a program is a sequence of `pattern { action }` rules and
+  // every matching rule runs for each line — e.g. one rule per record type.
+  const rules = [];
+  while (peek().type !== 'EOF') {
+    rules.push(parseRule());
+    while (peek().type === ';') next();
+  }
+  if (!rules.length) throw new Error('Empty awk program');
+  return rules;
 }
 function awkLooksNumeric(s) { return /^-?\d+(\.\d+)?$/.test(s); }
 function awkToBool(v) {
@@ -1450,28 +1938,31 @@ function evalAwkNode(node, ctx) {
         return node.op === '~' ? m : !m;
       }
       const l = evalAwkNode(node.left, ctx), r = evalAwkNode(node.right, ctx);
-      const cmp = (awkLooksNumeric(l) && awkLooksNumeric(r)) ? (parseFloat(l) - parseFloat(r)) : (l < r ? -1 : l > r ? 1 : 0);
+      // POSIX awk: a string constant (or concatenation) on either side forces a
+      // string comparison, so $15=="0" does not match "000".
+      const forceString = ['str', 'concat'].includes(node.left.kind) || ['str', 'concat'].includes(node.right.kind);
+      const cmp = (!forceString && awkLooksNumeric(l) && awkLooksNumeric(r)) ? (parseFloat(l) - parseFloat(r)) : (l < r ? -1 : l > r ? 1 : 0);
       switch (node.op) { case '==': return cmp === 0; case '!=': return cmp !== 0; case '<': return cmp < 0; case '<=': return cmp <= 0; case '>': return cmp > 0; case '>=': return cmp >= 0; }
     }
   }
   throw new Error('Unknown AST node: ' + node.kind);
 }
 function runAwk(programSrc, lines) {
-  const ast = parseAwkProgram(programSrc);
+  const rules = parseAwkProgram(programSrc);
   const out = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const fields = line.trim().length ? line.trim().split(/\s+/) : [];
+    const fields = splitFields(line);
     const ctx = { line, fields, nr: i + 1 };
-    if (awkToBool(evalAwkNode(ast.pattern, ctx))) {
-      if (ast.action.kind === 'noop') continue;
-      if (ast.action.args.length === 0) { out.push(line); continue; }
-      out.push(ast.action.args.map(a => evalAwkNode(a, ctx)).join(' '));
+    for (const rule of rules) {
+      if (!awkToBool(evalAwkNode(rule.pattern, ctx)) || rule.action.kind === 'noop') continue;
+      out.push(rule.action.args.length === 0 ? line : rule.action.args.map(a => evalAwkNode(a, ctx)).join(' '));
     }
   }
   return out;
 }
 function applySort(lines, args) {
+  for (const a of args) if (!/^-[nru]+$/.test(a)) throw new Error(`sort: unsupported option '${a}' (supported: -n -r -u)`);
   const flags = args.join(''); const numeric = flags.includes('n'); const reverse = flags.includes('r'); const unique = flags.includes('u');
   let arr = lines.slice();
   arr.sort((a, b) => {
@@ -1483,6 +1974,7 @@ function applySort(lines, args) {
   return arr;
 }
 function applyUniq(lines, args) {
+  for (const a of args) if (a !== '-c') throw new Error(`uniq: unsupported option '${a}' (supported: -c)`);
   const withCount = args.includes('-c'); const out = []; let i = 0;
   while (i < lines.length) {
     let j = i + 1; while (j < lines.length && lines[j] === lines[i]) j++;
@@ -1492,15 +1984,34 @@ function applyUniq(lines, args) {
   return out;
 }
 function applyHeadTail(lines, args, fromEnd) {
-  let n = 10; const joined = args.join(' '); const m = /-n\s*(\d+)/.exec(joined) || /-(\d+)/.exec(joined);
-  if (m) n = parseInt(m[1], 10);
+  const cmd = fromEnd ? 'tail' : 'head';
+  let n = 10;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]; let m;
+    if ((m = /^-n?(\d+)$/.exec(a))) n = parseInt(m[1], 10);
+    else if (a === '-n' && /^\d+$/.test(args[i + 1] || '')) n = parseInt(args[++i], 10);
+    else throw new Error(`${cmd}: unsupported option '${a}' (supported: -N, -n N)`);
+  }
   return fromEnd ? lines.slice(Math.max(0, lines.length - n)) : lines.slice(0, n);
 }
+// -E is accepted as a no-op: JavaScript regexes are already extended syntax.
 function applyGrep(lines, args) {
-  const invert = args.includes('-v'); const icase = args.includes('-i');
-  const pattern = args.filter(a => a !== '-v' && a !== '-i').join(' ');
-  const re = new RegExp(pattern, icase ? 'i' : '');
-  return lines.filter(l => invert ? !re.test(l) : re.test(l));
+  let invert = false, icase = false, fixed = false, count = false;
+  const patterns = [];
+  for (const a of args) {
+    if (/^-[viEFc]+$/.test(a)) {
+      if (a.includes('v')) invert = true;
+      if (a.includes('i')) icase = true;
+      if (a.includes('F')) fixed = true;
+      if (a.includes('c')) count = true;
+    } else if (a.startsWith('-') && a.length > 1) {
+      throw new Error(`grep: unsupported option '${a}' (supported: -v -i -E -F -c)`);
+    } else patterns.push(a);
+  }
+  if (patterns.length !== 1) throw new Error(`grep: expected exactly one pattern, got ${patterns.length} — quote patterns that contain spaces`);
+  const re = new RegExp(fixed ? patterns[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : patterns[0], icase ? 'i' : '');
+  const out = lines.filter(l => invert ? !re.test(l) : re.test(l));
+  return count ? [String(out.length)] : out;
 }
 function runQueryPipeline(input, rawLines) {
   const stages = awkSplitTopLevel(input, '|');
@@ -1516,18 +2027,24 @@ function runQueryPipeline(input, rawLines) {
     else if (cmd === 'head') lines = applyHeadTail(lines, args, false);
     else if (cmd === 'tail') lines = applyHeadTail(lines, args, true);
     else if (cmd === 'grep') lines = applyGrep(lines, args);
-    else if (cmd === 'wc') lines = [String(lines.length)];
+    else if (cmd === 'wc') {
+      if (args.length !== 1 || args[0] !== '-l') throw new Error("wc: only 'wc -l' is supported");
+      lines = [String(lines.length)];
+    }
     else throw new Error(`Unsupported pipeline command '${cmd}' (supported: sort, uniq, head, tail, grep, wc)`);
   }
   return lines;
 }
+/* @testable:end */
 
 /* ---------- IP geolocation (geojs.io, no key, CORS-open) ----------
-   This is the one thing in this tool that sends data to a third party.
-   Edge/Origin IPs are looked up automatically since a file usually only has
-   a handful of distinct values; client IPs are looked up on demand (one
-   click per row) so a file with thousands of unique clients doesn't fire
-   thousands of requests or blow through the API's free-tier rate limit. */
+   This is the one thing in this tool that sends data to a third party, so
+   nothing is looked up until the user asks. Edge/Origin IPs are looked up
+   once the user clicks "Look up locations" (and for later files in the same
+   tab, since a file usually only has a handful of distinct values); client
+   IPs are looked up on demand (one click per row) so a file with thousands
+   of unique clients doesn't fire thousands of requests or blow through the
+   API's free-tier rate limit. */
 const geoCache = new Map(); // ip -> {status:'ok', text, org} | {status:'error', text} | Promise of same
 function isPrivateOrPlaceholderIp(ip) {
   if (!ip || ip === '-') return true;
@@ -1594,14 +2111,21 @@ function geoResultText(geo) {
   return geo.text;
 }
 let infraLocationRenderToken = 0;
+let infraGeoOptIn = false; // set by the "Look up locations" button; deliberately not persisted
+let lastInfra = null;
 async function renderLocationList(el, ips, emptyMsg, myToken) {
   if (!ips.length) { el.textContent = emptyMsg; return; }
   const state = new Map(ips.map((ip) => [ip, geoCache.get(ip) || null]));
   const paint = () => {
     if (infraLocationRenderToken !== myToken) return;
-    el.innerHTML = ips.map((ip) => `<div>${ip} — ${geoResultText(state.get(ip))}</div>`).join('');
+    el.innerHTML = ips.map((ip) => {
+      const geo = state.get(ip);
+      const text = (geo && typeof geo.then !== 'function') || infraGeoOptIn ? geoResultText(geo) : 'location not looked up';
+      return `<div>${escapeHtml(ip)} — ${escapeHtml(text)}</div>`;
+    }).join('');
   };
   paint();
+  if (!infraGeoOptIn) return;
   await Promise.all(ips.map(async (ip) => {
     const geo = await lookupIpLocation(ip);
     state.set(ip, geo);
@@ -1609,6 +2133,7 @@ async function renderLocationList(el, ips, emptyMsg, myToken) {
   }));
 }
 async function renderInfraLocations(infra) {
+  lastInfra = infra;
   const myToken = ++infraLocationRenderToken; // guards against a stale async response landing after a newer file is loaded
   const edgeEl = document.getElementById('edgeLocationList');
   const originEl = document.getElementById('originLocationList');
@@ -1618,18 +2143,29 @@ async function renderInfraLocations(infra) {
   ]);
 }
 
+const infraGeoBtn = document.getElementById('infraGeoBtn');
+infraGeoBtn.addEventListener('click', () => {
+  infraGeoOptIn = true;
+  infraGeoBtn.disabled = true;
+  infraGeoBtn.textContent = 'Location lookups on for this tab';
+  if (lastInfra) renderInfraLocations(lastInfra);
+});
+
 /* ---------- Upload wiring ---------- */
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const uploadStatus = document.getElementById('uploadStatus');
 let currentRawLines = [];
-// The complete, unfiltered parse of whatever's currently loaded. A Time
-// Range selection filters these down into currentRawLines/analyze() inputs
-// without needing to re-parse the raw text.
-let fullRawLines = [], fullRLines = [], fullFLines = [];
-let activeTimeRange = null; // { from, to } in epoch seconds, or null = full range
-let lastSourceLabel = '';
+// The complete, unfiltered parse of whatever's currently loaded. A time range
+// filters these down without re-parsing; fullLineTs is index-aligned with
+// fullRawLines so the Custom Query scope filters without re-splitting lines.
+let fullRawLines = [], fullLineTs = [], fullRLines = [], fullFLines = [];
+let activeTimeRange = null; // null = full range; see makeRangePredicate() for the shapes
+let lastSourceLabel = '', lastParseReport = null, lastSkippedLines = [];
+let currentScopeLines = null; // { rLines, fLines } behind the dashboard; null while showing sample data
 
+// Whether the loaded data has S records, so generated queries need an S rule.
+function datasetHasS() { return !!(lastParseReport && lastParseReport.S); }
 function setStatus(msg, cls) {
   uploadStatus.textContent = msg;
   uploadStatus.className = cls || '';
@@ -1650,92 +2186,104 @@ function setRangeEnabled(enabled) {
   document.getElementById('applyRangeBtn').disabled = !enabled;
   document.getElementById('resetRangeBtn').disabled = !enabled;
 }
-function epochToLocalInputValue(epochSec) {
-  const d = new Date(epochSec * 1000);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-function localInputValueToEpoch(v) {
-  const t = new Date(v).getTime();
+// Range inputs are UTC, matching every timestamp shown elsewhere on the page.
+function epochToUtcInputValue(epochSec) { return new Date(Math.floor(epochSec) * 1000).toISOString().slice(0, 19); }
+function utcInputValueToEpoch(v) {
+  if (!v) return null;
+  const t = Date.parse((v.length === 16 ? v + ':00' : v) + 'Z');
   return Number.isFinite(t) ? t / 1000 : null;
+}
+function setRangeInputs(from, to) {
+  document.getElementById('rangeFrom').value = epochToUtcInputValue(from);
+  document.getElementById('rangeTo').value = epochToUtcInputValue(to);
+}
+function setFullRangeInputs() {
+  if (!fullRLines.length) return;
+  const [lo, hi] = minMax(fullRLines.map((f) => fnum(f[RF.ts])));
+  setRangeInputs(lo, hi);
 }
 
 // Applies activeTimeRange (if any) to the full parsed dataset, returning the
-// slice that analyze() and Custom Query should both operate on.
+// slice that analyze(), group-by and Custom Query all operate on.
 function applyActiveRange() {
   if (!activeTimeRange) return { rLines: fullRLines, fLines: fullFLines, rawLines: fullRawLines };
-  const { from, to } = activeTimeRange;
-  const inRange = (f) => { const t = fnum(f[2]); return t >= from && t <= to; };
-  const rLines = fullRLines.filter(inRange);
-  const fLines = fullFLines.filter(inRange);
-  const rawLines = fullRawLines.filter(l => {
-    const f = l.split(' ');
-    if (f[1] !== 'r' && f[1] !== 'f') return false;
-    return inRange(f);
-  });
-  return { rLines, fLines, rawLines };
+  const inRange = makeRangePredicate(activeTimeRange);
+  return {
+    rLines: fullRLines.filter((f) => inRange(fnum(f[RF.ts]))),
+    fLines: fullFLines.filter((f) => inRange(fnum(f[FF.ts]))),
+    rawLines: fullRawLines.filter((_, i) => inRange(fullLineTs[i])),
+  };
 }
 
 function refreshDashboard() {
   const { rLines, fLines, rawLines } = applyActiveRange();
   currentRawLines = rawLines;
-  setQueryEnabled(rawLines.length > 0, `${rawLines.length} lines loaded`);
+  currentScopeLines = { rLines, fLines };
+  setQueryEnabled(rawLines.length > 0, rawLines.length ? `${rawLines.length} lines in scope` : 'no lines in scope');
   const badge = document.getElementById('rangeBadge');
   const statusEl = document.getElementById('rangeStatus');
   if (activeTimeRange) {
-    badge.textContent = 'filtered';
+    badge.textContent = activeTimeRange.kind === 'bin' ? 'zoomed to bin' : 'filtered';
     badge.style.background = 'color-mix(in srgb, var(--series-1) 20%, transparent)';
     badge.style.color = 'var(--series-1)';
-    statusEl.textContent = `Showing ${rLines.length} of ${fullRLines.length} client requests in this window.`;
+    const to = activeTimeRange.kind === 'bin' ? activeTimeRange.to : activeTimeRange.toSec;
+    statusEl.textContent = `Showing ${rLines.length} of ${fullRLines.length} client requests, ${formatUtc(activeTimeRange.from)} → ${formatUtc(to)} UTC.`;
   } else {
     badge.textContent = 'full range';
     badge.style.background = 'var(--gridline)';
     badge.style.color = 'var(--text-muted)';
     statusEl.textContent = fullRLines.length ? `${fullRLines.length} client requests total.` : '';
   }
+  const parseText = lastParseReport ? parseReportText(lastParseReport) : '';
   if (rLines.length === 0) {
-    setStatus(`No client-facing (r-type) records in this ${activeTimeRange ? 'time range' : 'file'} — the Custom Query box will still work on whatever raw lines are in scope.`, 'error');
+    // Clear every widget rather than leave the previous dataset (or the
+    // sample) on screen looking like the answer for this input.
+    const empty = emptyResult(activeTimeRange
+      ? 'No client-facing (r/S) requests in the selected time range.'
+      : 'No client-facing (r/S) requests could be parsed from this input — see the parse report in Raw aggregate data.');
+    empty.parseReport = lastParseReport;
+    renderAll(empty);
+    setStatus(`${lastSourceLabel} — ${parseText}. No client-facing requests ${activeTimeRange ? 'in this time range' : 'to analyze'}, so the dashboard was cleared${rawLines.length ? '; Custom Query still works on the forward legs in scope' : ''}.`, 'error');
     return;
   }
   const result = analyze(rLines, fLines);
+  result.parseReport = lastParseReport;
   renderAll(result);
-  const suffix = activeTimeRange ? ` (time-filtered: ${rLines.length} of ${fullRLines.length} requests)` : '';
-  setStatus(`${lastSourceLabel} — parsed ${rLines.length} client requests + ${fLines.length} origin legs.${suffix}`, 'success');
+  const suffix = activeTimeRange ? ` · time-filtered to ${rLines.length} of ${fullRLines.length} requests` : '';
+  setStatus(`${lastSourceLabel} — ${parseText}${suffix}.`, lastParseReport && lastParseReport.skippedTotal ? 'warn' : 'success');
 }
 
 function analyzeText(combined, sourceLabel) {
-  const { lines, rLines, fLines } = parseLogText(combined);
+  const { lines, lineTs, rLines, fLines, report, skippedLines } = parseLogText(combined);
   fullRawLines = lines;
+  fullLineTs = lineTs;
   fullRLines = rLines;
   fullFLines = fLines;
+  lastParseReport = report;
+  lastSkippedLines = skippedLines;
   activeTimeRange = null;
   lastSourceLabel = sourceLabel;
   setRangeEnabled(rLines.length > 0);
-  if (rLines.length > 0) {
-    const ts = rLines.map(f => fnum(f[2]));
-    document.getElementById('rangeFrom').value = epochToLocalInputValue(Math.min(...ts));
-    document.getElementById('rangeTo').value = epochToLocalInputValue(Math.max(...ts));
-  }
+  if (rLines.length > 0) setFullRangeInputs();
+  else { document.getElementById('rangeFrom').value = ''; document.getElementById('rangeTo').value = ''; }
   refreshDashboard();
   return rLines.length > 0;
 }
 document.getElementById('applyRangeBtn').addEventListener('click', () => {
-  const from = localInputValueToEpoch(document.getElementById('rangeFrom').value);
-  const to = localInputValueToEpoch(document.getElementById('rangeTo').value);
-  if (from === null || to === null || from > to) {
+  const from = utcInputValueToEpoch(document.getElementById('rangeFrom').value);
+  const toSec = utcInputValueToEpoch(document.getElementById('rangeTo').value);
+  if (from === null || toSec === null || from > toSec) {
     document.getElementById('rangeStatus').textContent = 'Invalid range — "From" must be a valid time at or before "To".';
     return;
   }
-  activeTimeRange = { from, to };
+  // "To" is inclusive of its whole second, so sub-second timestamps in the
+  // final second (e.g. 10:15:00.750) aren't silently dropped.
+  activeTimeRange = { kind: 'manual', from, toSec, toExclusive: toSec + 1 };
   refreshDashboard();
 });
 document.getElementById('resetRangeBtn').addEventListener('click', () => {
   activeTimeRange = null;
-  if (fullRLines.length > 0) {
-    const ts = fullRLines.map(f => fnum(f[2]));
-    document.getElementById('rangeFrom').value = epochToLocalInputValue(Math.min(...ts));
-    document.getElementById('rangeTo').value = epochToLocalInputValue(Math.max(...ts));
-  }
+  setFullRangeInputs();
   refreshDashboard();
 });
 
@@ -1755,10 +2303,11 @@ async function handleFiles(fileList) {
 document.getElementById('chooseBtn').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 document.getElementById('resetBtn').addEventListener('click', () => {
-  renderAll(SAMPLE_DATA);
   fileInput.value = '';
   currentRawLines = [];
-  fullRawLines = []; fullRLines = []; fullFLines = []; activeTimeRange = null; lastSourceLabel = '';
+  fullRawLines = []; fullLineTs = []; fullRLines = []; fullFLines = []; activeTimeRange = null; lastSourceLabel = '';
+  lastParseReport = null; lastSkippedLines = []; currentScopeLines = null;
+  renderAll(SAMPLE_DATA);
   setQueryEnabled(false, 'no file loaded');
   setRangeEnabled(false);
   document.getElementById('rangeFrom').value = '';
@@ -1802,6 +2351,7 @@ document.getElementById('clearPasteBtn').addEventListener('click', () => {
    nothing is sent anywhere. Field numbers below are the full documented
    column layout for 'r' (client-facing) and 'f' (origin/forward leg)
    records — 1-indexed, matching awk's own $N numbering directly. */
+/* @testable:begin */
 const R_FIELDS = [
   { idx: 1, label: 'Edge IP address', names: ['edge ip address', 'edge ip'] },
   { idx: 3, label: 'Start time', names: ['start time'] },
@@ -1872,10 +2422,31 @@ const F_FIELDS = [
   { idx: 29, label: 'Request id', names: ['request id'] },
   { idx: 30, label: 'Error line message', names: ['error line message', 'error', 'reason'] },
 ];
+// 1-indexed ($N) views of the shared RF/FF field map.
 const RECORD_KEYS = {
-  r: { type: 'r', status: 14, method: 12, ip: 11, host: 18, reason: 15, uri: 13, latency: 6, fields: R_FIELDS },
-  f: { type: 'f', status: 15, method: 13, ip: 12, host: 24, reason: 30, uri: 14, latency: 7, fields: F_FIELDS },
+  r: { type: 'r', status: RF.status + 1, method: RF.method + 1, ip: RF.clientIp + 1, host: RF.host + 1, reason: RF.error + 1, uri: RF.arl + 1, latency: RF.turnaround + 1, fields: R_FIELDS },
+  f: { type: 'f', status: FF.status + 1, method: FF.method + 1, ip: FF.clientIp + 1, host: FF.forwardHost + 1, reason: FF.error + 1, uri: FF.arl + 1, latency: FF.turnaround + 1, fields: F_FIELDS },
 };
+// 1-indexed r-line column -> S-record column, for columns whose meaning is
+// confirmed in both layouts. The ARL maps to S's host-relative path.
+const R_TO_S_COLUMN = (() => {
+  const m = { 2: 2, 20: SF.referrer + 1, 32: SF.requestId + 1 };
+  for (const k in RF) if (SF[k] !== undefined) m[RF[k] + 1] = SF[k] + 1;
+  m[RF.arl + 1] = SF.path + 1;
+  return m;
+})();
+// Rewrites the $N references of a generated r-line expression to S columns.
+// Returns the r columns S lacks instead when there are any. Escaped "\$"
+// (from user text inside a regex) is not a field reference.
+function remapToS(expr) {
+  const missing = new Set();
+  const out = expr.replace(/(?<!\\)\$(\d+)/g, (m, n) => {
+    const to = R_TO_S_COLUMN[n];
+    if (to === undefined) { missing.add('$' + n); return m; }
+    return '$' + to;
+  });
+  return missing.size ? { missing: [...missing] } : { expr: out };
+}
 function nlEscapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function fieldEntry(K, idx, fallbackLabel) {
   return K.fields.find(f => f.idx === idx) || { idx, label: fallbackLabel, names: [] };
@@ -1929,7 +2500,7 @@ function detectRecordType(q) {
   return 'r';
 }
 
-function translateEnglish(text) {
+function translateEnglish(text, { includeS = false } = {}) {
   // Strip quote marks before matching so quoted phrasing like "'f' line" or
   // 'field "16"' is treated the same as the unquoted form.
   const q = text.toLowerCase().trim().replace(/['"''""]/g, '');
@@ -1955,6 +2526,11 @@ function translateEnglish(text) {
     explicitFields.push(fieldEntry(K, parseInt(n, 10), `field ${n}`));
     return ' '.repeat(m.length);
   });
+
+  // "top 200" is a row count, not HTTP status 200 — read it, then mask it out
+  // before the status-code heuristics run.
+  const topMatch = qMasked.match(/\btop\s+(\d+)\b/);
+  qMasked = qMasked.replace(/\btop\s+\d+\b/g, (m) => ' '.repeat(m.length));
 
   const STATUS_CLASS = { '2xx': [200, 299], '3xx': [300, 399], '4xx': [400, 499], '5xx': [500, 599] };
   for (const cls in STATUS_CLASS) {
@@ -1997,7 +2573,7 @@ function translateEnglish(text) {
   if (hostMatch) { filters.push(`$${K.host}~/${nlEscapeRegex(hostMatch[0])}/`); notes.push(`host contains ${hostMatch[0]}`); }
 
   if (/env file|\.env\b|secret scan|config file scan/.test(qMasked)) {
-    filters.push(`$${K.uri}~/\\.env|\\.git|next\\.config/`);
+    filters.push(`$${K.uri}~/\\.env|\\.git|next\\.config|wp-config|\\.aws\\/credentials/`);
     notes.push('env/config-file scan pattern');
   }
   if (/path traversal|directory traversal/.test(qMasked)) {
@@ -2013,7 +2589,6 @@ function translateEnglish(text) {
   const hadExplicitFields = fields.length > 0;
 
   const wantsTotalCount = /\bhow many\b|\btotal (number|count)\b/.test(qMasked) && !hadExplicitFields;
-  const topMatch = qMasked.match(/\btop\s+(\d+)\b/);
   const slowest = /\bslowest\b|\bhighest latenc/.test(qMasked);
 
   // Decide recognizability using ONLY what was explicitly found — must happen
@@ -2038,26 +2613,40 @@ function translateEnglish(text) {
   else mode = 'count';
 
   const pattern = [`$2=="${recordType}"`, ...filters].join(' && ');
-  let command;
-  if (mode === 'totalcount') {
-    command = `awk '${pattern}' | wc -l`;
-  } else {
-    const printExpr = fields.map(f => `$${f.idx}`).join(' "\\t" ');
-    command = `awk '${pattern} {print ${printExpr}}'`;
-    if (mode === 'count') { command += ' | sort | uniq -c | sort -rn'; if (topN) command += ` | head -${topN}`; }
-    else if (mode === 'unique') command += ' | sort -u';
-    else if (mode === 'sortlatency') { command += ' | sort -rn'; if (topN) command += ` | head -${topN}`; }
+  const printExpr = mode === 'totalcount' ? null : fields.map(f => `$${f.idx}`).join(' "\\t" ');
+  let program = printExpr === null ? pattern : `${pattern} {print ${printExpr}}`;
+  // S records are client-facing too: add a second rule reading the same
+  // columns at S positions, unless one of them doesn't exist in S records.
+  let sNote = '', sIncluded = false;
+  if (includeS && recordType === 'r') {
+    const sPattern = remapToS([`$2=="S"`, ...filters].join(' && '));
+    const sPrint = printExpr === null ? { expr: null } : remapToS(printExpr);
+    const missing = [...(sPattern.missing || []), ...(sPrint.missing || [])];
+    if (missing.length) sNote = ` · S records not included: they have no equivalent of r-line ${[...new Set(missing)].join(', ')}`;
+    else if (sPrint.expr === null) { program = `(${pattern}) || (${sPattern.expr})`; sIncluded = true; }
+    else {
+      program += ` ${sPattern.expr} {print ${sPrint.expr}}`;
+      sIncluded = true;
+      if (fields.some(f => f.idx === K.uri)) sNote = ' · S rows show the ARL as the path after the host';
+    }
   }
+  let command = `awk '${program}'`;
+  if (mode === 'totalcount') command += ' | wc -l';
+  else if (mode === 'count') { command += ' | sort | uniq -c | sort -rn'; if (topN) command += ` | head -${topN}`; }
+  else if (mode === 'unique') command += ' | sort -u';
+  else if (mode === 'sortlatency') { command += ' | sort -rn'; if (topN) command += ` | head -${topN}`; }
 
   const fieldLabel = wantsTotalCount ? 'total matching lines' : fields.map(f => `${f.label} ($${f.idx})`).join(' + ');
-  const recordLabel = recordType === 'f' ? "[f-line / origin-forward leg]" : "[r-line / client-facing]";
-  const explanation = `${recordLabel} Showing ${fieldLabel}` + (notes.length ? `, filtered by: ${notes.join('; ')}` : '') + ` · mode: ${mode}` + (topN ? ` (top ${topN})` : '');
+  const recordLabel = recordType === 'f' ? "[f-line / origin-forward leg]" : sIncluded ? "[r + S lines / client-facing]" : "[r-line / client-facing]";
+  const explanation = `${recordLabel} Showing ${fieldLabel}` + (notes.length ? `, filtered by: ${notes.join('; ')}` : '') + ` · mode: ${mode}` + (topN ? ` (top ${topN})` : '') + sNote;
   return { command, explanation };
 }
+/* @testable:end */
 
 /* ---------- Custom query wiring ---------- */
 let lastQueryOutput = [];
-function runCustomQuery() {
+function runCustomQuery(contextLabel) {
+  const context = typeof contextLabel === 'string' ? `Lines behind "${contextLabel}": ` : '';
   const input = document.getElementById('queryInput').value.trim();
   const statusEl = document.getElementById('queryStatus');
   const outEl = document.getElementById('queryOutput');
@@ -2070,7 +2659,7 @@ function runCustomQuery() {
     const CAP = 5000;
     outEl.textContent = out.slice(0, CAP).join('\n') || '(no matching lines)';
     statusEl.style.color = 'var(--text-muted)';
-    statusEl.textContent = out.length > CAP ? `${out.length} output lines (showing first ${CAP} — use Download for the rest)` : `${out.length} output line(s)`;
+    statusEl.textContent = context + (out.length > CAP ? `${out.length} output lines (showing first ${CAP} — use Download for the rest)` : `${out.length} output line(s)`);
     dlBtn.style.display = out.length ? 'inline-flex' : 'none';
   } catch (err) {
     lastQueryOutput = [];
@@ -2080,14 +2669,14 @@ function runCustomQuery() {
     dlBtn.style.display = 'none';
   }
 }
-document.getElementById('runQueryBtn').addEventListener('click', runCustomQuery);
+document.getElementById('runQueryBtn').addEventListener('click', () => runCustomQuery());
 function runNlTranslate() {
   const nlInput = document.getElementById('nlInput');
   const explainEl = document.getElementById('nlExplain');
   if (nlInput.disabled) return;
   const text = nlInput.value.trim();
   if (!text) { explainEl.textContent = ''; return; }
-  const result = translateEnglish(text);
+  const result = translateEnglish(text, { includeS: datasetHasS() });
   if (!result) {
     explainEl.style.color = 'var(--critical)';
     explainEl.textContent = "Couldn't confidently interpret that — try mentioning a field (ARL/URI, IP, status, host, method, latency) and optionally a filter (a status code, GET, blocked, an IP, a host). Or write AWK directly in Advanced below.";
@@ -2112,7 +2701,8 @@ document.getElementById('queryInput').addEventListener('keydown', (e) => {
 document.querySelectorAll('[data-example]').forEach(btn => {
   btn.addEventListener('click', () => {
     if (document.getElementById('queryInput').disabled) return;
-    document.getElementById('queryInput').value = btn.dataset.example;
+    // S-aware variant when the loaded data has S records (their columns differ).
+    document.getElementById('queryInput').value = (datasetHasS() && btn.dataset.exampleS) || btn.dataset.example;
     runCustomQuery();
   });
 });
@@ -2129,7 +2719,7 @@ function renderSavedQueryOptions() {
   const select = document.getElementById('savedQuerySelect');
   const current = select.value;
   select.innerHTML = '<option value="">Saved queries…</option>' +
-    loadSavedQueries().map(q => `<option value="${q.name.replace(/"/g, '&quot;')}">${q.name}</option>`).join('');
+    loadSavedQueries().map(q => `<option value="${escapeHtml(q.name)}">${escapeHtml(q.name)}</option>`).join('');
   select.value = loadSavedQueries().some(q => q.name === current) ? current : '';
 }
 document.getElementById('saveQueryBtn').addEventListener('click', () => {
@@ -2162,21 +2752,24 @@ document.getElementById('deleteSavedQueryBtn').addEventListener('click', () => {
 });
 renderSavedQueryOptions();
 
-document.getElementById('downloadQueryBtn').addEventListener('click', () => {
-  const blob = new Blob([lastQueryOutput.join('\n') + '\n'], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
+function downloadText(filename, text, type = 'text/plain') {
+  const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement('a');
-  a.href = url; a.download = 'query-output.txt'; a.click();
+  a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
+}
+document.getElementById('downloadQueryBtn').addEventListener('click', () => {
+  downloadText('query-output.txt', lastQueryOutput.join('\n') + '\n');
+});
+document.getElementById('downloadSkippedBtn').addEventListener('click', () => {
+  downloadText('skipped-lines.txt', '# reason<TAB>original line\n' + lastSkippedLines.join('\n') + '\n');
 });
 document.getElementById('exportJsonBtn').addEventListener('click', () => {
   if (!lastAnalyzeResult) return;
-  const payload = { exportedAt: new Date().toISOString(), timeRange: activeTimeRange, ...lastAnalyzeResult };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'edge-log-analysis-summary.json'; a.click();
-  URL.revokeObjectURL(url);
+  // ipAll can hold every client IP in the file; the export keeps the top-12 table.
+  const { ipAll, ...summary } = lastAnalyzeResult;
+  const payload = { exportedAt: new Date().toISOString(), source: lastSourceLabel, timeRange: activeTimeRange, ...summary };
+  downloadText('edge-log-analysis-summary.json', JSON.stringify(payload, null, 2), 'application/json');
 });
 
 /* ---------- Initial render ---------- */
