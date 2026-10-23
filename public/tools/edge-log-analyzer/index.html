@@ -74,6 +74,7 @@
     color: var(--text-primary);
     padding: 24px;
   }
+  /* @site-only:begin */
   nav.site-nav {
     display: flex; align-items: center; justify-content: space-between;
     max-width: 1280px; margin: 0 auto 16px; padding: 10px 2px;
@@ -81,6 +82,7 @@
   }
   nav.site-nav a { color: var(--text-secondary); text-decoration: none; }
   nav.site-nav a:hover { color: var(--text-primary); }
+  /* @site-only:end */
   header { max-width: 1280px; margin: 0 auto 16px; }
   header h1 { font-size: 20px; margin: 0 0 4px; }
   header p { margin: 0; color: var(--text-secondary); font-size: 13px; }
@@ -185,10 +187,12 @@
 </head>
 <body>
 
+<!-- @site-only:begin -->
 <nav class="site-nav">
   <a href="/tools">← Tools</a>
   <a href="https://github.com/abilashhp/edge-log-analyzer" target="_blank" rel="noopener">View source ↗</a>
 </nav>
+<!-- @site-only:end -->
 
 <header>
   <h1 id="pageTitle">Edge Log Analysis — Sample Data <span id="statusBadge" class="badge WARN">WARN</span></h1>
