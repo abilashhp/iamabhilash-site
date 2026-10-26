@@ -21,7 +21,7 @@ test('escapeHtml neutralises markup and attribute breakouts', () => {
 test('every innerHTML assignment in the page interpolates only escaped or numeric values', () => {
   const html = readFileSync(INDEX_HTML, 'utf8');
   // Collect the template literals assigned to innerHTML / outerHTML and check each ${...}.
-  const allowed = /^(escapeHtml\(|ipLocationCellHtml\(|statusPillClass\(|fmtPct\(|formatUtc\(|r\.n$|r\.p50 \?\? |r\.p95 \?\? |i$|d\.id$|shown\.length$|matched\.length$)/;
+  const allowed = /^(escapeHtml\(|ipLocationCellHtml\(|statusPillClass\(|fmtPct\(|formatUtc\(|r\.n$|r\.p50 \?\? |r\.p95 \?\? |r\.p99 \?\? |r\.avg \?\? |i$|d\.id$|shown\.length$|matched\.length$)/;
   const offenders = [];
   for (const m of html.matchAll(/(?:innerHTML|outerHTML)\s*[+]?=([\s\S]*?);\n/g)) {
     for (const expr of m[1].matchAll(/\$\{([^}]*)\}/g)) {
@@ -100,15 +100,59 @@ test('turnaround split compares like with like', () => {
   for (let i = 0; i < 90; i++) lines.push(r({ ts: t++, lat: 5, os: 'd' }));
   for (let i = 0; i < 10; i++) { lines.push(r({ ts: t, lat: 900, os: 'o' })); lines.push(fl({ ts: t++, lat: 850 })); }
   const { a } = parseAndAnalyze(lines);
-  assert.deepEqual(a.turnaround.cache, { n: 90, p50: 5, p95: 5, avg: 5 });
-  assert.deepEqual(a.turnaround.contacted, { n: 10, p50: 900, p95: 900, avg: 900 });
-  assert.deepEqual(a.turnaround.forward, { n: 10, p50: 850, p95: 850, avg: 850 });
+  assert.deepEqual(a.turnaround.cache, { n: 90, p50: 5, p95: 5, p99: 5, avg: 5 });
+  assert.deepEqual(a.turnaround.contacted, { n: 10, p50: 900, p95: 900, p99: 900, avg: 900 });
+  assert.deepEqual(a.turnaround.forward, { n: 10, p50: 850, p95: 850, p99: 850, avg: 850 });
 });
 
 test('p95 is withheld for groups smaller than the minimum sample size', () => {
   const { a } = parseAndAnalyze([r({ os: 'o', lat: 100 }), r({ os: 'o', lat: 200, ts: 1700000001 })]);
   assert.equal(a.turnaround.contacted.p95, null);
-  assert.equal(a.turnaround.contacted.p50, 150);
+  assert.equal(a.turnaround.contacted.p99, null);
+  assert.equal(a.turnaround.contacted.p50, 100);
+});
+
+test('percentiles are nearest-rank, matching sort -n + awk a[ceil(n*p)]', () => {
+  // 1..20: p95 = rank 19 and p99 = rank 20 (interpolating would give 19.05 and 19.81).
+  const lines = [r(), ...Array.from({ length: 20 }, (_, i) => fl({ ts: 1700000000 + i, lat: i + 1 }))];
+  const { a } = parseAndAnalyze(lines);
+  assert.deepEqual(a.turnaround.forward, { n: 20, p50: 10, p95: 19, p99: 20, avg: 11 });
+  // 1011 samples: rank ceil(960.45) = 961, the 961st smallest value.
+  const big = [r(), ...Array.from({ length: 1011 }, (_, i) => fl({ ts: 1700000000 + i, lat: i }))];
+  assert.equal(parseAndAnalyze(big).a.turnaround.forward.p95, 960);
+});
+
+test('chained hops in one file are flagged instead of silently blended', () => {
+  // Edge A takes a loopback subrequest and forwards to edge B's host; edge B
+  // sees edge A as its client and forwards to the backend.
+  const lines = [];
+  for (let i = 0; i < 10; i++) {
+    const ts = 1700000000 + i;
+    lines.push(r({ ts, edge: '23.0.0.1', ip: '127.0.0.1', lat: 100, os: 'p' }));
+    lines.push(fl({ ts, edge: '23.0.0.1', fhost: 'tier.example.net', lat: 90 }));
+    lines.push(r({ ts, edge: '23.0.0.2', ip: '23.0.0.1', lat: 10, os: 'p' }));
+    lines.push(fl({ ts, edge: '23.0.0.2', fhost: 'backend.example.net', lat: 5 }));
+  }
+  const { a } = parseAndAnalyze(lines);
+  assert.deepEqual(a.turnaround.clientTiers.map((t) => [t.key, t.n, t.p95]), [['loopback', 10, 100], ['edge', 10, 10]]);
+  assert.deepEqual(a.turnaround.forwardByHost.map((h) => [h.key, h.n, h.p50]), [['tier.example.net', 10, 90], ['backend.example.net', 10, 5]]);
+  assert.match(a.kpis.p95Mix, /blends 2 hops/);
+  assert.match(a.turnaround.tierMix, /10 from loopback.*: p50 100ms, p95 100ms.*10 from other edges in this file.*p95 10ms/);
+  assert.match(a.turnaround.fwdMix, /2 forward hosts/);
+});
+
+test('a single-tier, single-origin file raises no blend warning', () => {
+  const { a } = parseAndAnalyze([r({ os: 'o' }), fl(), r({ os: 'o', ts: 1700000001, ip: '5.6.7.8' }), fl({ ts: 1700000001 })]);
+  assert.equal(a.kpis.p95Mix, '');
+  assert.equal(a.turnaround.tierMix, '');
+  assert.equal(a.turnaround.fwdMix, '');
+});
+
+test('group-by rows carry p99 and avg', () => {
+  const lines = Array.from({ length: 20 }, (_, i) => fl({ ts: 1700000000 + i, lat: i + 1, fhost: 'backend.example.net' }));
+  const p = T.parseLogText(lines.join('\n'));
+  const [row] = T.groupBy(p.rLines, p.fLines, 'fwdHost');
+  assert.deepEqual([row.key, row.p50, row.p95, row.p99, row.avg], ['backend.example.net', 10, 19, 20, 11]);
 });
 
 test('empty timeline bins are null, not 0 ms', () => {

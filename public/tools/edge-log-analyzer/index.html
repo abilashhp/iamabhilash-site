@@ -179,6 +179,8 @@
   .turn-head { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
   .turn-row { display: flex; gap: 24px; }
   .turn-row .value { font-size: 20px; }
+  .mix-note { font-size: 12px; color: var(--text-primary); background: color-mix(in srgb, var(--warning) 16%, transparent); border-left: 3px solid var(--warning); padding: 6px 10px; border-radius: 4px; margin: 0 0 10px; }
+  .kpi .mix-note { margin: 6px 0 0; padding: 3px 6px; font-size: 11px; }
   #groupByTable td, #groupByTable th { padding: 6px 8px; }
   #groupByTable td.key { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; word-break: break-all; }
   details summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
@@ -259,6 +261,7 @@
       <div class="label">p95 Latency</div>
       <div class="value" id="kpiP95">165ms</div>
       <div class="sub" id="kpiP95Sub">p50 0ms · p99 336ms · max 862ms</div>
+      <div class="sub mix-note" id="kpiP95Mix" hidden></div>
     </div>
     <div class="card kpi">
       <div class="label">Peak RPS</div>
@@ -293,6 +296,8 @@
   <div class="card">
     <h2>Turnaround Time Breakdown</h2>
     <p class="hint">Client-facing turnaround (r-line field 6) split by whether the edge had to go forward, next to the forward legs themselves (f-line field 7). Slow cache-served requests point at the edge; slow forwarded requests with equally slow forward legs point upstream. These are three different request populations — compare them, don't subtract them. p95 is shown only when a group has at least 5 requests.</p>
+    <p class="mix-note" id="turnTierMix" hidden></p>
+    <p class="mix-note" id="turnFwdMix" hidden></p>
     <div class="turn-grid">
       <div>
         <div class="turn-head">Client ↔ Edge · served from cache</div>
@@ -322,6 +327,13 @@
         <div class="sub muted" id="tfN" style="font-size:12px; margin-top:4px;">origin or parent tier</div>
       </div>
     </div>
+    <div id="turnFwdHosts" hidden style="margin-top:14px; overflow-x:auto;">
+      <div class="turn-head">Forward legs by forward host</div>
+      <table>
+        <thead><tr><th>Forward host</th><th class="num">Legs</th><th class="num">p50</th><th class="num">p95</th><th class="num">p99</th><th class="num">avg</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="card" id="groupByCard">
@@ -343,6 +355,8 @@
             <th data-key="r0" class="num">No status (0/-)</th>
             <th data-key="p50" class="num">p50 ms</th>
             <th data-key="p95" class="num">p95 ms</th>
+            <th data-key="p99" class="num">p99 ms</th>
+            <th data-key="avg" class="num">avg ms</th>
             <th data-key="first">First → last seen (UTC)</th>
             <th></th>
           </tr>
@@ -534,7 +548,8 @@
       </table>
       <p class="foot-note">
         Latency figures use Turnaround time (field 6), the documented positional field closest to end-to-end edge
-        processing time. Format: Akamai Ghost edge/WAF delivery log, record types <code>r</code> (client request)
+        processing time. Percentiles are nearest-rank: the sorted value at rank ceil(n × p), the same number
+        <code>sort -n</code> plus awk gives, never an interpolated value. Format: Akamai Ghost edge/WAF delivery log, record types <code>r</code> (client request)
         and <code>f</code> (origin/forward leg).
       </p>
     </div>
@@ -554,14 +569,15 @@ const SAMPLE_DATA = {
     total: 559, totalSub: "+441 origin-leg records",
     rate404: "0.0%", rate404Sub: "0 of 559", good404: true,
     count5xx: 0, count5xxSub: "no server errors observed", good5xx: true,
-    p95: "165ms", p95Sub: "p50 0ms · p99 336ms · max 862ms",
+    p95: "165ms", p95Sub: "p50 0ms · p99 336ms · max 862ms", p95Mix: "",
     peakRps: "0.9",
     blocks: 106, blocksSub: "103×403 + 3×429 (19.0%) · 98 with WAF info · 3 origin-contacted"
   },
   turnaround: {
     cache: { n: 359, p50: 0, p95: 41, avg: 9 },
     contacted: { n: 175, p50: 96, p95: 336, avg: 121 },
-    forward: { n: 441, p50: 12, p95: 203, avg: 58 }
+    forward: { n: 441, p50: 12, p95: 203, avg: 58 },
+    clientTiers: [], forwardByHost: [], tierMix: '', fwdMix: ''
   },
   infra: { edgeIps: [], originIps: [] },
   timeline: {
@@ -695,12 +711,15 @@ const TS_MIN = 946684800, TS_MAX = 4102444800;
 const NBINS = 30;
 const MIN_N_FOR_P95 = 5;
 
+// Nearest-rank percentile: the value at 1-based rank ceil(n·p) of the sorted
+// samples, i.e. what `sort -n | awk '{a[NR]=$1} END{r=int(NR*p); if(r<NR*p)r++;
+// print a[r]}'` prints, so dashboard numbers match a hand-run AWK exactly.
+// Always an observed value, never interpolated. The epsilon keeps float error
+// in n·p from pushing an exact rank up by one.
 function pct(sortedArr, p) {
-  if (!sortedArr.length) return 0;
-  const k = (sortedArr.length - 1) * p;
-  const lo = Math.floor(k), hi = Math.min(lo + 1, sortedArr.length - 1);
-  if (lo === hi) return sortedArr[lo];
-  return sortedArr[lo] + (sortedArr[hi] - sortedArr[lo]) * (k - lo);
+  const n = sortedArr.length;
+  if (!n) return 0;
+  return sortedArr[Math.min(n - 1, Math.max(0, Math.ceil(n * p - 1e-9) - 1))];
 }
 function fnum(v, d = 0) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
 function bucketOf(status) {
@@ -1017,8 +1036,35 @@ function latencyStats(values) {
     n,
     p50: n ? Math.round(pct(s, 0.5)) : null,
     p95: n >= MIN_N_FOR_P95 ? Math.round(pct(s, 0.95)) : null,
+    p99: n >= MIN_N_FOR_P95 ? Math.round(pct(s, 0.99)) : null,
     avg: n ? Math.round(s.reduce((a, b) => a + b, 0) / n) : null,
   };
+}
+// latencyStats per key, largest group first.
+function latencyByKey(lines, keyOf, latIdx) {
+  const m = new Map();
+  for (const f of lines) {
+    const k = keyOf(f);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(fnum(f[latIdx]));
+  }
+  return [...m].map(([key, vals]) => ({ key, ...latencyStats(vals) })).sort((a, b) => b.n - a.n);
+}
+// Who sent a client-facing request: the edge itself over loopback (an internal
+// subrequest, e.g. an SBSD/CPR call), another edge that also logs in this file,
+// or anyone else. More than one tier means the file holds chained hops of the
+// same requests, and a percentile over all r lines blends those hops.
+const CLIENT_TIERS = {
+  loopback: 'from loopback (edge-internal)',
+  edge: 'from other edges in this file',
+  external: 'from outside clients',
+};
+function clientTierOf(ip, edgeIps) {
+  if (/^127\./.test(ip) || ip === '::1') return 'loopback';
+  return edgeIps.has(ip) ? 'edge' : 'external';
+}
+function fmtTier(t) {
+  return `${t.n} ${CLIENT_TIERS[t.key]}: p50 ${t.p50}ms${t.p95 === null ? '' : `, p95 ${t.p95}ms`}`;
 }
 function peakIn60s(sortedTs) {
   let peak = 0, left = 0;
@@ -1198,6 +1244,14 @@ function analyze(rLines, fLines) {
   for (const f of fLines) if (f[FF.edgeIp] && f[FF.edgeIp] !== '-') edgeIpSet.add(f[FF.edgeIp]);
   const originIpSet = new Set();
   for (const f of fLines) if (f[FF.forwardIp] && f[FF.forwardIp] !== '-') originIpSet.add(f[FF.forwardIp]);
+  const clientTiers = latencyByKey(rLines, (f) => clientTierOf(f[RF.clientIp], edgeIpSet), RF.turnaround);
+  const forwardByHost = latencyByKey(fLines, (f) => f[FF.forwardHost], FF.turnaround);
+  const tierMix = clientTiers.length > 1
+    ? `Blends ${clientTiers.length} hops: ${clientTiers.map(fmtTier).join(' · ')}. Use Breakdown by Dimension → Client IP to separate them.`
+    : '';
+  const fwdMix = forwardByHost.length > 1
+    ? `Forward legs go to ${forwardByHost.length} forward hosts, so the forward-leg figures blend them; per-host split below.`
+    : '';
 
   const count404 = statusCounts.get('404') || 0;
   // The 5xx KPI and status badge count user-facing errors only: a SureRoute
@@ -1285,6 +1339,7 @@ function analyze(rLines, fLines) {
       good5xx: count5xx === 0,
       p95: Math.round(latency.p95) + 'ms',
       p95Sub: `p50 ${Math.round(latency.p50)}ms · p99 ${Math.round(latency.p99)}ms · max ${Math.round(latency.max)}ms`,
+      p95Mix: tierMix ? `⚠ blends ${clientTiers.length} hops — see Turnaround Time Breakdown` : '',
       peakRps: peakRps.toFixed(2),
       blocks: blockedTotal,
       blocksSub: `${blocked403}×403 + ${blocked429}×429 (${pctOf(blockedTotal)}%) · ${blockedWithWaf} with WAF info · ${blockedOriginContacted} origin-contacted`,
@@ -1293,6 +1348,7 @@ function analyze(rLines, fLines) {
       cache: latencyStats(latCache),
       contacted: latencyStats(latContacted),
       forward: latencyStats(fLines.map((f) => fnum(f[FF.turnaround]))),
+      clientTiers, forwardByHost, tierMix, fwdMix,
     },
     infra: { edgeIps: [...edgeIpSet], originIps: [...originIpSet] },
     timeline: { labels: binLabels, counts: binCounts, rps: binRps, p95: binP95, status2xx: binStatus['2xx'], status3xx: binStatus['3xx'], status4xx: binStatus['4xx'], status5xx: binStatus['5xx'], t0, t1, binWidth },
@@ -1358,7 +1414,7 @@ function groupBy(rLines, fLines, dimId) {
     return {
       key: g.key, n: g.n, share: g.n / total * 100,
       r4: g.c4 / g.n * 100, r5: g.c5 / g.n * 100, r0: g.c0 / g.n * 100,
-      p50: ls.p50, p95: ls.p95, first: g.first, last: g.last,
+      p50: ls.p50, p95: ls.p95, p99: ls.p99, avg: ls.avg, first: g.first, last: g.last,
       drill: isEndpoint ? endpointDrill(g.host, g.path, multiHost) : { rec: dim.rec, conds: [{ field: dim.field, op: 'eq', value: g.key }] },
     };
   }).sort((a, b) => b.n - a.n);
@@ -1551,7 +1607,7 @@ function renderGroupBy() {
   const note = document.getElementById('groupByNote');
   if (!currentScopeLines) {
     gbShown = [];
-    tbody.innerHTML = '<tr><td colspan="10" class="muted">Upload or paste a log to break it down by dimension — the sample dashboard has no raw lines behind it.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="muted">Upload or paste a log to break it down by dimension — the sample dashboard has no raw lines behind it.</td></tr>';
     note.textContent = '';
     return;
   }
@@ -1575,13 +1631,15 @@ function renderGroupBy() {
       <td class="num">${fmtPct(r.r0)}</td>
       <td class="num">${r.p50 ?? '—'}</td>
       <td class="num">${r.p95 ?? '—'}</td>
+      <td class="num">${r.p99 ?? '—'}</td>
+      <td class="num">${r.avg ?? '—'}</td>
       <td class="muted" style="font-size:12px; white-space:nowrap;">${formatUtc(r.first).slice(5)} → ${formatUtc(r.last).slice(5)}</td>
       <td><button class="drill-link" data-gb-idx="${i}">lines</button></td>
-    </tr>`).join('') || '<tr><td colspan="10" class="muted">No groups match.</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="12" class="muted">No groups match.</td></tr>';
   const dim = GROUP_DIMS.find((d) => d.id === gbDimSelect.value);
   note.textContent = `${matched.length} group(s)${q ? ' matching' : ''}${matched.length > GB_MAX_ROWS ? `, showing the first ${GB_MAX_ROWS}` : ''} · `
     + `${dim.rec === 'f' ? 'forward legs; latency = f-line turnaround (field 7)' : 'client requests; latency = r-line turnaround (field 6)'}`
-    + ` · p95 shown only for groups with ≥ ${MIN_N_FOR_P95} requests.`;
+    + ` · p95/p99 shown only for groups with ≥ ${MIN_N_FOR_P95} requests; percentiles are nearest-rank (an observed value, as sort -n + awk gives).`;
 }
 gbDimSelect.addEventListener('change', refreshGroupBy);
 gbSearch.addEventListener('input', renderGroupBy);
@@ -1640,8 +1698,8 @@ function emptyResult(subtitle) {
   const none = { n: 0, p50: null, p95: null, avg: null };
   return {
     meta: { title: 'Edge Log Analysis — No Data', subtitle, statusBadge: 'NODATA' },
-    kpis: { total: 0, totalSub: '—', rate404: '—', rate404Sub: '—', good404: null, count5xx: '—', count5xxSub: '—', good5xx: null, p95: '—', p95Sub: '—', peakRps: '—', blocks: '—', blocksSub: '—' },
-    turnaround: { cache: none, contacted: none, forward: none },
+    kpis: { total: 0, totalSub: '—', rate404: '—', rate404Sub: '—', good404: null, count5xx: '—', count5xxSub: '—', good5xx: null, p95: '—', p95Sub: '—', p95Mix: '', peakRps: '—', blocks: '—', blocksSub: '—' },
+    turnaround: { cache: none, contacted: none, forward: none, clientTiers: [], forwardByHost: [], tierMix: '', fwdMix: '' },
     infra: { edgeIps: [], originIps: [] },
     timeline: { labels: [], counts: [], rps: [], p95: [], status2xx: [], status3xx: [], status4xx: [], status5xx: [] },
     cache: { hitRatio: '—', hitRatioSub: '—', good: null, breakdown: [] },
@@ -1658,6 +1716,11 @@ function emptyResult(subtitle) {
 let lastAnalyzeResult = null;
 function kpiClass(good) { return 'card kpi' + (good === true ? ' good' : good === false ? ' warn' : ''); }
 function fmtMs(v) { return v === null || v === undefined ? '—' : v + 'ms'; }
+function showNote(id, text) {
+  const el = document.getElementById(id);
+  el.textContent = text || '';
+  el.hidden = !text;
+}
 function renderAll(d) {
   lastAnalyzeResult = d;
   document.getElementById('pageTitle').childNodes[0].nodeValue = `Edge Log Analysis — ${d.meta.title.replace('Edge Log Analysis — ', '')} `;
@@ -1676,6 +1739,7 @@ function renderAll(d) {
   document.getElementById('kpi5xxCard').className = kpiClass(d.kpis.good5xx);
   document.getElementById('kpiP95').textContent = d.kpis.p95;
   document.getElementById('kpiP95Sub').textContent = d.kpis.p95Sub;
+  showNote('kpiP95Mix', d.kpis.p95Mix);
   document.getElementById('kpiPeakRps').textContent = d.kpis.peakRps;
   document.getElementById('kpiBlocks').textContent = d.kpis.blocks;
   document.getElementById('kpiBlocksSub').textContent = d.kpis.blocksSub;
@@ -1698,6 +1762,20 @@ function renderAll(d) {
     document.getElementById(prefix + 'Avg').textContent = fmtMs(g.avg);
     document.getElementById(prefix + 'N').textContent = `n = ${g.n} · ${desc}`;
   }
+  showNote('turnTierMix', d.turnaround.tierMix);
+  showNote('turnFwdMix', d.turnaround.fwdMix);
+  const fwdHosts = d.turnaround.forwardByHost.length > 1 ? d.turnaround.forwardByHost : [];
+  const fwdHostsBox = document.getElementById('turnFwdHosts');
+  fwdHostsBox.hidden = !fwdHosts.length;
+  fwdHostsBox.querySelector('tbody').innerHTML = fwdHosts.slice(0, 10).map((h) => `
+    <tr>
+      <td class="key">${escapeHtml(h.key)}</td>
+      <td class="num">${escapeHtml(h.n)}</td>
+      <td class="num">${escapeHtml(fmtMs(h.p50))}</td>
+      <td class="num">${escapeHtml(fmtMs(h.p95))}</td>
+      <td class="num">${escapeHtml(fmtMs(h.p99))}</td>
+      <td class="num">${escapeHtml(fmtMs(h.avg))}</td>
+    </tr>`).join('');
   renderInfraLocations(d.infra);
 
   rpsChart.data.labels = d.timeline.labels;
