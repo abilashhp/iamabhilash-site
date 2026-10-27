@@ -183,6 +183,16 @@
   .kpi .mix-note { margin: 6px 0 0; padding: 3px 6px; font-size: 11px; }
   #groupByTable td, #groupByTable th { padding: 6px 8px; }
   #groupByTable td.key { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; word-break: break-all; }
+  .badge.INFO { background: color-mix(in srgb, var(--series-1) 20%, transparent); color: var(--series-1); }
+  .pill.sev-critical { background: color-mix(in srgb, var(--critical) 22%, transparent); color: var(--critical); }
+  .pill.sev-warn { background: color-mix(in srgb, var(--serious) 22%, transparent); color: var(--serious); }
+  .pill.sev-info { background: color-mix(in srgb, var(--series-1) 18%, transparent); color: var(--series-1); }
+  #gfaCard td, #gfaCard th { padding: 6px 8px; }
+  #gfaCard td.key { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; word-break: break-all; }
+  #gfaCard tr.gfa-bad td.key { color: var(--serious); font-weight: 600; }
+  #gfaCard tr.gfa-selected td { background: color-mix(in srgb, var(--series-1) 10%, transparent); }
+  .gfa-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px; }
+  @media (max-width: 900px) { .gfa-fields { grid-template-columns: 1fr; } }
   details summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
   code { font-size: 12px; background: color-mix(in srgb, var(--text-muted) 15%, transparent); padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -469,6 +479,58 @@
       </thead>
       <tbody></tbody>
     </table>
+  </div>
+
+  <div class="card" id="gfaCard">
+    <h2>Ghost Fact Annotations (GFA) <span id="gfaBadge" class="badge NODATA">no file loaded</span></h2>
+    <p class="hint">
+      GFA is the <code>namespace=//provider/field/field/…</code> column some edge features write to explain a decision
+      (why a request was classified, challenged or skipped). The column is found automatically; each annotation is
+      split into provider entries and every field is tallied, so you can see which providers fired, which values
+      dominate, and jump to the exact lines. Field names, value meanings and the Insights list come from a GFA
+      dictionary (JSON) you load from your own disk — it stays in this browser's local storage, is never uploaded,
+      and isn't part of this page. Without one you still get the structure: providers, field positions and raw values.
+      Click "fields" on a provider to break it down; use Trace to follow one value (e.g. a session ID) across every annotation.
+    </p>
+    <div class="filter-row" style="flex-wrap:wrap; align-items:center;">
+      <button class="btn" id="gfaDictBtn">Load GFA dictionary…</button>
+      <button class="btn" id="gfaDictForgetBtn">Forget dictionary</button>
+      <input type="file" id="gfaDictInput" accept=".json,application/json" hidden>
+      <span id="gfaDictStatus" style="font-size:12px; color:var(--text-muted);"></span>
+    </div>
+    <p class="foot-note" id="gfaSummary"></p>
+    <div id="gfaInsightsBox" hidden style="margin-top:12px; overflow-x:auto;">
+      <div class="turn-head">Insights</div>
+      <table id="gfaInsights">
+        <thead><tr><th>Severity</th><th>Finding</th><th class="num">Requests</th><th class="num">Share of GFA</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="foot-note" id="gfaInsightsNote"></p>
+    </div>
+    <div id="gfaProvidersBox" hidden style="margin-top:12px; overflow-x:auto;">
+      <div class="turn-head">Providers</div>
+      <table id="gfaProviderTable">
+        <thead><tr><th>Provider</th><th>Meaning</th><th class="num">Requests</th><th class="num">Share of GFA</th><th class="num">403/429</th><th class="num">4xx</th><th class="num">5xx</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="gfaDetail" hidden style="margin-top:14px;">
+      <div class="turn-head" id="gfaDetailTitle" style="font-size:13px; color:var(--text-primary); text-transform:none; letter-spacing:0;"></div>
+      <p class="hint" id="gfaDetailDesc" style="margin:2px 0 6px;"></p>
+      <p class="foot-note" id="gfaDetailLayout"></p>
+      <div class="gfa-fields" id="gfaDetailFields"></div>
+    </div>
+    <div class="filter-row" style="margin-top:14px;">
+      <input id="gfaTraceInput" type="text" placeholder="Trace one value across all GFA entries, e.g. a session ID…">
+      <button class="btn" id="gfaTraceBtn">Trace</button>
+    </div>
+    <p class="foot-note" id="gfaTraceStatus"></p>
+    <div id="gfaTraceBox" hidden style="overflow-x:auto;">
+      <table id="gfaTraceTable">
+        <thead><tr><th>Time (UTC)</th><th>Client IP</th><th>Status</th><th>Method</th><th>ARL</th><th>Entries holding the value</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="card" id="customQueryCard">
@@ -974,10 +1036,21 @@ const MIN_FIELDS_OK = {
   f: (n) => n >= F_MIN_FIELDS && n < R_MIN_FIELDS,
 };
 const STATUS_INDEX = { r: RF.status, S: SF.status, f: FF.status };
+// The GFA column holds no fixed position we can rely on across log layouts,
+// so it is found by content: per record type, the column that most often
+// holds a "namespace=/…" token.
+function mostHitColumn(hits) {
+  let best = null;
+  for (const [col, n] of hits) if (best === null || n > hits.get(best)) best = col;
+  return best;
+}
 // rLines holds every client-facing record (r lines, and S lines re-shaped by
 // sToRView); `lines` keeps the original text so queries see the real columns.
+// Client-facing records that carry GFA get a `gfa` property with the raw
+// token (sToRView drops the column, so it's captured here).
 function parseLogText(text) {
   const lines = [], lineTs = [], rLines = [], fLines = [], skippedLines = [];
+  const gfaHits = { r: new Map(), S: new Map() }, gfaCandidates = new Map();
   const seen = new Set();
   const report = { totalLines: 0, r: 0, S: 0, f: 0, duplicates: 0, skipped: { notRF: 0, fieldCount: 0, badTimestamp: 0, misaligned: 0 }, skippedTotal: 0 };
   for (let l of text.split('\n')) {
@@ -1000,7 +1073,22 @@ function parseLogText(text) {
     lines.push(l);
     lineTs.push(Number(f[RF.ts]));
     report[type]++;
-    if (type === 'f') fLines.push(f); else rLines.push(type === 'S' ? sToRView(f) : f);
+    if (type === 'f') { fLines.push(f); continue; }
+    const view = type === 'S' ? sToRView(f) : f;
+    rLines.push(view);
+    if (l.indexOf('=/') === -1) continue; // cheap pre-check before scanning columns
+    const cands = new Map();
+    for (let i = 3; i < f.length; i++) {
+      if (!GFA_TOKEN.test(f[i])) continue;
+      cands.set(i, f[i]);
+      gfaHits[type].set(i, (gfaHits[type].get(i) || 0) + 1);
+    }
+    if (cands.size) gfaCandidates.set(view, cands);
+  }
+  report.gfaColumn = { r: mostHitColumn(gfaHits.r), S: mostHitColumn(gfaHits.S) };
+  for (const [view, cands] of gfaCandidates) {
+    const token = cands.get(report.gfaColumn[view[RF.type]]);
+    if (token) view.gfa = token;
   }
   report.skippedTotal = Object.values(report.skipped).reduce((a, b) => a + b, 0);
   return { lines, lineTs, rLines, fLines, report, skippedLines };
@@ -1419,6 +1507,203 @@ function groupBy(rLines, fLines, dimId) {
     };
   }).sort((a, b) => b.n - a.n);
 }
+
+/* ---------- Ghost Fact Annotations (GFA) ----------
+   A GFA token is one log column of ";"-separated "namespace=/…" parts. Each
+   part's value is a run of entries "//provider/field/field/…": an entry
+   starts at a provider name directly after "//" (or after the "=/" opening
+   the value). Fields can be empty, so a bare "//" doesn't start an entry —
+   only a known provider name does. The empty segment of the "//" that ends
+   an entry stays as its last field: that keeps each field's position exactly
+   what an awk regex sees, so drill-downs reproduce every count. Providers are known from the loaded
+   dictionary, plus every provider that opens a part somewhere in the data
+   ("ns=//cf/…"), which needs no dictionary. Only this structure is built in;
+   names, meanings and insight rules all come from the user's dictionary. */
+const GFA_TOKEN = /(?:^|;)[A-Za-z][\w-]*=\//;
+const GFA_NS = /^[A-Za-z][\w-]*$/;
+const GFA_SEVERITY_RANK = { critical: 0, warn: 1, info: 2 };
+function gfaParts(token) {
+  const parts = [];
+  for (const p of token.split(';')) {
+    const eq = p.indexOf('=');
+    if (eq <= 0 || p[eq + 1] !== '/' || !GFA_NS.test(p.slice(0, eq))) continue;
+    parts.push({ ns: p.slice(0, eq), segs: p.slice(eq + 1).split('/') });
+  }
+  return parts;
+}
+function gfaOpeningProvider(part) {
+  let i = 0;
+  while (i < part.segs.length && part.segs[i] === '') i++;
+  return i > 0 && i < part.segs.length ? `${part.ns}/${part.segs[i]}` : null;
+}
+function gfaEntries(token, providers) {
+  const out = [];
+  for (const { ns, segs } of gfaParts(token)) {
+    let cur = null;
+    for (let i = 1; i < segs.length; i++) {
+      const key = `${ns}/${segs[i]}`;
+      if (segs[i - 1] === '' && providers.has(key)) {
+        cur = { key, ns, provider: segs[i], fields: [] };
+        out.push(cur);
+      } else if (cur) cur.fields.push(segs[i]);
+    }
+  }
+  return out;
+}
+// Throws a readable error for anything the renderer can't use.
+function validateGfaDictionary(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('expected a JSON object');
+  if (!d.providers || typeof d.providers !== 'object' || Array.isArray(d.providers)) throw new Error('expected a "providers" object keyed by "namespace/provider"');
+  for (const [key, p] of Object.entries(d.providers)) {
+    if (!/^[A-Za-z][\w-]*\/[^/;\s]+$/.test(key)) throw new Error(`provider key "${key}" should look like "namespace/provider"`);
+    if (!p || typeof p !== 'object') throw new Error(`provider "${key}" should be an object`);
+    if (p.fields !== undefined && !Array.isArray(p.fields)) throw new Error(`provider "${key}": "fields" should be an array`);
+  }
+  if (d.insights !== undefined && !Array.isArray(d.insights)) throw new Error('"insights" should be an array');
+  return d;
+}
+const hasOwn = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+// Exact match first, then case-insensitive (docs and logs disagree on case).
+function gfaLookup(map, v) {
+  if (!map) return undefined;
+  if (hasOwn(map, v)) return map[v];
+  const lower = v.toLowerCase();
+  for (const k in map) if (hasOwn(map, k) && k.toLowerCase() === lower) return map[k];
+  return undefined;
+}
+function gfaMeaning(def, v) {
+  if (!def) return '';
+  const direct = gfaLookup(def.values, v);
+  if (direct !== undefined) return String(direct);
+  if (def.bitmask && /^\d+$/.test(v) && Number(v) > 0) {
+    const n = Number(v), names = [];
+    let known = 0;
+    for (const bit in def.bitmask) if (hasOwn(def.bitmask, bit) && n & Number(bit)) { names.push(def.bitmask[bit]); known |= Number(bit); }
+    if (n & ~known) names.push(`unknown bits ${n & ~known}`);
+    return names.join(' + ');
+  }
+  return '';
+}
+function gfaIsBad(def, v) {
+  if (!def || !def.bad) return false;
+  if (def.bad === 'nonzero') return v !== '' && v !== '0' && v !== '-';
+  return Array.isArray(def.bad) && def.bad.some((b) => String(b).toLowerCase() === v.toLowerCase());
+}
+// Awk regex for one GFA condition on the GFA column. Mirrors gfaEntries: the
+// value opens with "/", the provider opens it or follows "//", and field k is
+// the (k+1)-th segment after it. {trace} matches any whole segment.
+function gfaCondRegex(c) {
+  if (c.trace !== undefined) return `(=|\\/)${reEscape(c.trace)}(\\/|;|$)`;
+  const head = `(^|;)${reEscape(c.ns)}=(\\/|(\\/[^;]*)?\\/\\/)${reEscape(c.provider)}`;
+  if (c.field === undefined) return `${head}(\\/|;|$)`;
+  const vals = c.values.map(reEscape);
+  const alt = vals.length === 1 ? vals[0] : `(${vals.join('|')})`;
+  return `${head}${c.field ? `(\\/[^\\/;]*){${c.field}}` : ''}\\/${alt}(\\/|;|$)`;
+}
+// Every condition must hold somewhere in the line's GFA (awk "&&" of regexes).
+function buildGfaDrillQuery(conds, column) {
+  const rules = ['r', 'S'].filter((t) => column[t] !== null && column[t] !== undefined)
+    .map((t) => [`$2==${awkStr(t)}`, ...conds.map((c) => `$${column[t] + 1}~/${gfaCondRegex(c)}/`)].join(' && '));
+  if (!rules.length) return null;
+  return rules.length === 1 ? `awk '${rules[0]}'` : `awk '(${rules[0]}) || (${rules[1]})'`;
+}
+// Whether a line's parsed GFA satisfies one condition — the dashboard-side
+// twin of gfaCondRegex, so a count and its drill-down always agree.
+function gfaCondHolds(c, parts, entries) {
+  if (c.trace !== undefined) return parts.some((p) => p.segs.includes(c.trace));
+  const key = `${c.ns}/${c.provider}`;
+  return entries.some((e) => e.key === key && (c.field === undefined || c.values.includes(e.fields[c.field])));
+}
+function gfaTraceable(v) { return !!v && !/[\s/;]/.test(v); }
+// Lines (client-facing views) whose GFA holds `value` as a whole segment.
+function gfaTrace(rLines, value) {
+  const cond = { trace: value };
+  return rLines.filter((f) => f.gfa && gfaCondHolds(cond, gfaParts(f.gfa), null));
+}
+// Tallies every provider and field over the client-facing lines in scope.
+// Counts are per request (a value repeated within one line counts once), which
+// is what an awk drill-down prints.
+function analyzeGfa(rLines, dict) {
+  const lines = rLines.filter((f) => f.gfa);
+  const providers = new Set(dict ? Object.keys(dict.providers) : []);
+  const parsed = lines.map((f) => gfaParts(f.gfa));
+  for (const parts of parsed) for (const part of parts) { const k = gfaOpeningProvider(part); if (k) providers.add(k); }
+  const entriesOf = lines.map((f) => gfaEntries(f.gfa, providers));
+  const stats = new Map();
+  lines.forEach((f, li) => {
+    const seenKey = new Set(), seenVal = new Set();
+    const bucket = bucketOf(f[RF.status]);
+    for (const e of entriesOf[li]) {
+      let s = stats.get(e.key);
+      if (!s) { s = { key: e.key, ns: e.ns, provider: e.provider, n: 0, blocked: 0, c4: 0, c5: 0, fields: [], lengths: new Map() }; stats.set(e.key, s); }
+      s.lengths.set(e.fields.length, (s.lengths.get(e.fields.length) || 0) + 1);
+      if (!seenKey.has(e.key)) {
+        seenKey.add(e.key);
+        s.n++;
+        if (f[RF.status] === '403' || f[RF.status] === '429') s.blocked++;
+        if (bucket === '4xx') s.c4++;
+        else if (bucket === '5xx') s.c5++;
+      }
+      e.fields.forEach((v, k) => {
+        const id = `${e.key}\u0000${k}\u0000${v}`;
+        if (seenVal.has(id)) return;
+        seenVal.add(id);
+        if (!s.fields[k]) s.fields[k] = new Map();
+        s.fields[k].set(v, (s.fields[k].get(v) || 0) + 1);
+      });
+    }
+  });
+  const withGfa = lines.length;
+  const share = (n) => (withGfa ? n / withGfa * 100 : 0);
+  const insights = [];
+  const rows = [...stats.values()].sort((a, b) => b.n - a.n).map((s) => {
+    const pdef = dict && hasOwn(dict.providers, s.key) ? dict.providers[s.key] : null;
+    const defs = pdef && pdef.fields ? pdef.fields : [];
+    const fields = [];
+    for (let k = 0; k < s.fields.length; k++) {
+      const counts = s.fields[k] || new Map();
+      const def = defs[k] || null;
+      const values = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([v, count]) => {
+        const bad = gfaIsBad(def, v);
+        const drill = [{ ns: s.ns, provider: s.provider, field: k, values: [v] }];
+        const meaning = gfaMeaning(def, v);
+        if (bad) {
+          const label = def.label || def.name || `field ${k + 1}`;
+          insights.push({ severity: 'warn', count, share: share(count), drill, text: `${s.key} · ${label} = "${v}"${meaning ? ` — ${meaning}` : ''}` });
+        }
+        return { v, count, share: count / s.n * 100, meaning, bad, drill }; // share of this provider's requests
+      });
+      fields.push({ k, name: def ? def.name || '' : '', label: def ? def.label || def.name || '' : '', description: def ? def.description || '' : '', trace: !!(def && def.trace), distinct: counts.size, values });
+    }
+    return {
+      key: s.key, ns: s.ns, provider: s.provider, title: pdef ? pdef.title || '' : '', description: pdef ? pdef.description || '' : '',
+      declared: pdef && pdef.fields ? pdef.fields.length : null,
+      n: s.n, share: share(s.n), blocked: s.blocked / s.n * 100, r4: s.c4 / s.n * 100, r5: s.c5 / s.n * 100,
+      lengths: [...s.lengths.entries()].sort((a, b) => b[1] - a[1]), fields,
+      drill: [{ ns: s.ns, provider: s.provider }],
+    };
+  });
+  // Dictionary rules: { provider, when: { fieldNameOrIndex: value | [values] }, severity, text }.
+  for (const rule of (dict && dict.insights) || []) {
+    if (!rule || typeof rule.provider !== 'string' || !stats.has(rule.provider)) continue;
+    const s = stats.get(rule.provider);
+    const defs = (dict.providers[rule.provider] && dict.providers[rule.provider].fields) || [];
+    const conds = [];
+    let ok = true;
+    for (const [name, want] of Object.entries(rule.when || {})) {
+      const k = /^\d+$/.test(name) ? Number(name) : defs.findIndex((d) => d && d.name === name);
+      if (k < 0) { ok = false; break; }
+      conds.push({ ns: s.ns, provider: s.provider, field: k, values: (Array.isArray(want) ? want : [want]).map(String) });
+    }
+    if (!ok) continue;
+    if (!conds.length) conds.push({ ns: s.ns, provider: s.provider });
+    let count = 0;
+    lines.forEach((f, li) => { if (conds.every((c) => gfaCondHolds(c, parsed[li], entriesOf[li]))) count++; });
+    if (count) insights.push({ severity: hasOwn(GFA_SEVERITY_RANK, rule.severity) ? rule.severity : 'info', count, share: share(count), drill: conds, text: String(rule.text || rule.provider) });
+  }
+  insights.sort((a, b) => GFA_SEVERITY_RANK[a.severity] - GFA_SEVERITY_RANK[b.severity] || b.count - a.count);
+  return { total: rLines.length, withGfa, providers: rows, insights };
+}
 /* @testable:end */
 
 /* ---------- Chart + DOM rendering ---------- */
@@ -1672,7 +1957,9 @@ function drillDown(spec, label) {
     return;
   }
   document.getElementById('advancedQuery').open = true;
-  document.getElementById('queryInput').value = buildDrillQuery(spec, { includeS: datasetHasS() });
+  document.getElementById('queryInput').value = spec.gfa
+    ? buildGfaDrillQuery(spec.gfa, lastParseReport.gfaColumn)
+    : buildDrillQuery(spec, { includeS: datasetHasS() });
   runCustomQuery(label);
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -1844,7 +2131,232 @@ function renderAll(d) {
     .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="font-variant-numeric:tabular-nums;">${escapeHtml(v)}</td></tr>`).join('');
   document.getElementById('downloadSkippedBtn').style.display = lastSkippedLines.length ? 'inline-flex' : 'none';
   refreshGroupBy();
+  refreshGfa();
 }
+
+/* ---------- Ghost Fact Annotations (GFA) section ---------- */
+// The dictionary is the user's own file. It lives in localStorage only; this
+// page ships no field names or meanings.
+const GFA_DICT_KEY = 'edgeLogAnalyzer.gfaDictionary';
+const GFA_TOP_VALUES = 8, GFA_TOP_TRACE_VALUES = 5, GFA_MAX_INSIGHTS = 25, GFA_MAX_TRACE_ROWS = 200;
+let gfaDict = null, gfaResult = null, gfaSelected = null;
+const gfaDrills = new Map(); // drill id -> { conds, label }, rebuilt on every render
+try { const raw = localStorage.getItem(GFA_DICT_KEY); if (raw) gfaDict = validateGfaDictionary(JSON.parse(raw)); } catch (e) { gfaDict = null; }
+
+function gfaDrillId(conds, label) {
+  const id = String(gfaDrills.size);
+  gfaDrills.set(id, { conds, label });
+  return id;
+}
+function gfaShowValue(v) { return v === '' ? '(empty)' : safeDecode(v); }
+function gfaColumnText(column) {
+  return ['r', 'S'].filter((t) => column[t] !== null).map((t) => `$${column[t] + 1} on ${t === 'r' ? 'r lines' : 'S records'}`).join(', ');
+}
+// Identifier-like fields (session IDs, hashes) list fewer values: they're for tracing, not tallying.
+function gfaTopN(fld) { return fld.trace ? GFA_TOP_TRACE_VALUES : GFA_TOP_VALUES; }
+function gfaFieldNote(fld) {
+  return fld.distinct > gfaTopN(fld) ? `${fld.distinct} distinct values, top ${gfaTopN(fld)} shown.` : `${fld.distinct} distinct value(s).`;
+}
+function gfaFieldTitle(fld) {
+  return `#${fld.k + 1}${fld.label ? ' · ' + fld.label : ''}${fld.name && fld.name !== fld.label ? ' (' + fld.name + ')' : ''}`;
+}
+// The entries of one line that hold `v`, as "ns/provider/f1/f2…" text.
+function gfaEntriesText(f, providers, v) {
+  return gfaEntries(f.gfa, providers).filter((e) => e.provider === v || e.fields.includes(v))
+    .map((e) => [e.key, ...e.fields].join('/')).join('  ·  ');
+}
+function renderGfaDetail() {
+  const box = document.getElementById('gfaDetail');
+  const p = gfaResult && gfaResult.providers.find((x) => x.key === gfaSelected);
+  box.hidden = !p;
+  const fieldsEl = document.getElementById('gfaDetailFields');
+  if (!p) {
+    fieldsEl.innerHTML = '';
+    return;
+  }
+  const lengths = p.lengths.map(([len, n]) => `${len} field(s) × ${n}`).join(', ');
+  // A trailing "/" adds one empty field, so declared+1 still lines up.
+  const shifted = p.declared !== null && p.lengths.some(([len]) => len !== p.declared && len !== p.declared + 1);
+  document.getElementById('gfaDetailTitle').textContent = `${p.key}${p.title ? ' — ' + p.title : ''}`;
+  document.getElementById('gfaDetailDesc').textContent = p.description;
+  document.getElementById('gfaDetailDesc').hidden = !p.description;
+  const layout = document.getElementById('gfaDetailLayout');
+  layout.className = shifted ? 'mix-note' : 'foot-note';
+  layout.textContent = shifted
+    ? `Field counts here (${lengths}) differ from the ${p.declared} fields the dictionary describes — labels may not line up with these positions.`
+    : `Entry layout: ${lengths}.`;
+  fieldsEl.innerHTML = p.fields.map((fld, i) => `
+    <div>
+      <div class="turn-head" style="margin-bottom:2px;">${escapeHtml(gfaFieldTitle(fld))}</div>
+      <div class="hint" style="margin:0 0 6px;">${escapeHtml(fld.description)}</div>
+      <table>
+        <thead><tr><th>Value</th><th>Meaning</th><th class="num">Requests</th><th class="num">Share of provider</th><th></th></tr></thead>
+        <tbody data-gfa-field="${i}"></tbody>
+      </table>
+      <p class="foot-note">${escapeHtml(gfaFieldNote(fld))}</p>
+    </div>`).join('');
+  fieldsEl.querySelectorAll('tbody[data-gfa-field]').forEach((tbody) => {
+    const fld = p.fields[Number(tbody.dataset.gfaField)];
+    const label = `${p.key} ${gfaFieldTitle(fld)}`;
+    tbody.innerHTML = fld.values.slice(0, gfaTopN(fld)).map((x) => `
+      <tr class="${escapeHtml(x.bad ? 'gfa-bad' : '')}">
+        <td class="key">${escapeHtml(gfaShowValue(x.v))}</td>
+        <td style="font-size:12px;">${escapeHtml(x.meaning)}</td>
+        <td class="num">${escapeHtml(x.count)}</td>
+        <td class="num">${escapeHtml(fmtPct(x.share))}</td>
+        <td style="white-space:nowrap;"><button class="drill-link" data-gfa-drill="${escapeHtml(gfaDrillId(x.drill, label + ' = ' + gfaShowValue(x.v)))}">lines</button>
+          <button class="drill-link" style="margin-left:6px;" data-gfa-trace="${escapeHtml(x.v)}" ${escapeHtml(gfaTraceable(x.v) ? '' : 'hidden')}>trace</button></td>
+      </tr>`).join('');
+  });
+}
+function renderGfaDictStatus() {
+  const el = document.getElementById('gfaDictStatus');
+  if (!gfaDict) { el.textContent = 'No dictionary loaded — showing structure and raw values only.'; return; }
+  const n = Object.keys(gfaDict.providers).length;
+  el.textContent = `Dictionary: ${gfaDict.name || 'unnamed'} · ${n} provider(s) · stored in this browser only.`;
+}
+function refreshGfa() {
+  const column = lastParseReport && lastParseReport.gfaColumn;
+  const found = !!column && (column.r !== null || column.S !== null);
+  gfaResult = currentScopeLines && found ? analyzeGfa(currentScopeLines.rLines, gfaDict) : null;
+  if (gfaResult && !gfaResult.providers.some((p) => p.key === gfaSelected)) gfaSelected = null;
+  renderGfa();
+  // Re-run an open trace so it never shows lines from a previous scope.
+  if (gfaTraceValue || !document.getElementById('gfaTraceBox').hidden) runGfaTrace(gfaTraceValue);
+}
+function renderGfa() {
+  gfaDrills.clear();
+  renderGfaDictStatus();
+  const badge = document.getElementById('gfaBadge');
+  const summary = document.getElementById('gfaSummary');
+  const column = lastParseReport && lastParseReport.gfaColumn;
+  document.getElementById('gfaInsightsBox').hidden = true;
+  document.getElementById('gfaProvidersBox').hidden = true;
+  if (!currentScopeLines) {
+    badge.className = 'badge NODATA'; badge.textContent = 'no file loaded';
+    summary.textContent = 'Upload or paste a log to look for GFA — the sample dashboard has no raw lines behind it.';
+    renderGfaDetail();
+    return;
+  }
+  if (!gfaResult) {
+    badge.className = 'badge NODATA'; badge.textContent = 'none found';
+    summary.textContent = 'No GFA column found in the client-facing lines of this input (looked for a column of "namespace=/…" annotations on r and S records).';
+    renderGfaDetail();
+    return;
+  }
+  const g = gfaResult;
+  badge.className = g.withGfa ? 'badge INFO' : 'badge NODATA';
+  badge.textContent = `${g.withGfa} request(s)`;
+  summary.textContent = `GFA on ${g.withGfa} of ${g.total} client requests in scope (${fmtPct(g.total ? g.withGfa / g.total * 100 : 0)}) · column ${gfaColumnText(column)} · ${g.providers.length} provider(s). Shares below are of the requests carrying GFA.`;
+
+  const insights = g.insights.slice(0, GFA_MAX_INSIGHTS);
+  document.getElementById('gfaInsightsBox').hidden = !gfaDict;
+  document.querySelector('#gfaInsights tbody').innerHTML = insights.map((x) => `
+    <tr>
+      <td><span class="pill sev-${escapeHtml(x.severity)}">${escapeHtml(x.severity)}</span></td>
+      <td style="font-size:12px;">${escapeHtml(x.text)}</td>
+      <td class="num">${escapeHtml(x.count)}</td>
+      <td class="num">${escapeHtml(fmtPct(x.share))}</td>
+      <td><button class="drill-link" data-gfa-drill="${escapeHtml(gfaDrillId(x.drill, x.text))}">lines</button></td>
+    </tr>`).join('') || '<tr><td colspan="5" class="muted">No dictionary rule or flagged value matched in this range.</td></tr>';
+  document.getElementById('gfaInsightsNote').textContent = g.insights.length > insights.length
+    ? `${g.insights.length} findings, showing the first ${insights.length}.`
+    : 'Findings come from the dictionary: values it flags as bad, plus its multi-field rules.';
+
+  document.getElementById('gfaProvidersBox').hidden = false;
+  document.querySelector('#gfaProviderTable tbody').innerHTML = g.providers.map((p) => `
+    <tr class="${escapeHtml(p.key === gfaSelected ? 'gfa-selected' : '')}">
+      <td class="key">${escapeHtml(p.key)}</td>
+      <td style="font-size:12px;">${escapeHtml(p.title || (gfaDict ? 'not in dictionary' : '—'))}</td>
+      <td class="num">${escapeHtml(p.n)}</td>
+      <td class="num">${escapeHtml(fmtPct(p.share))}</td>
+      <td class="num">${escapeHtml(fmtPct(p.blocked))}</td>
+      <td class="num">${escapeHtml(fmtPct(p.r4))}</td>
+      <td class="num">${escapeHtml(fmtPct(p.r5))}</td>
+      <td style="white-space:nowrap;"><button class="drill-link" data-gfa-select="${escapeHtml(p.key)}">fields</button> · <button class="drill-link" data-gfa-drill="${escapeHtml(gfaDrillId(p.drill, `GFA provider ${p.key}`))}">lines</button></td>
+    </tr>`).join('') || '<tr><td colspan="8" class="muted">No GFA in the selected time range.</td></tr>';
+  renderGfaDetail();
+}
+let gfaTraceValue = '';
+function runGfaTrace(value) {
+  const statusEl = document.getElementById('gfaTraceStatus');
+  const box = document.getElementById('gfaTraceBox');
+  const v = value.trim();
+  document.getElementById('gfaTraceInput').value = v;
+  gfaTraceValue = '';
+  box.hidden = true;
+  if (!v) { statusEl.textContent = ''; return; }
+  if (!gfaResult) { statusEl.textContent = 'Load a log with GFA first.'; return; }
+  if (!gfaTraceable(v)) { statusEl.textContent = 'Trace matches one whole field value, so it can\'t contain "/", ";" or spaces.'; return; }
+  gfaTraceValue = v;
+  const hits = gfaTrace(currentScopeLines.rLines, v).sort((a, b) => fnum(a[RF.ts]) - fnum(b[RF.ts]));
+  const providers = new Set(gfaDict ? Object.keys(gfaDict.providers) : []);
+  for (const p of gfaResult.providers) providers.add(p.key);
+  const shown = hits.slice(0, GFA_MAX_TRACE_ROWS);
+  const span = hits.length ? ` between ${formatUtc(fnum(hits[0][RF.ts]))} and ${formatUtc(fnum(hits[hits.length - 1][RF.ts]))} UTC` : '';
+  const more = hits.length > shown.length ? ` — first ${shown.length} shown` : '';
+  statusEl.innerHTML = `${escapeHtml(hits.length)} request(s) in scope carry "${escapeHtml(v)}"${escapeHtml(span + more)} · <button class="drill-link" data-gfa-trace-drill="${escapeHtml(v)}">lines</button>`;
+  box.hidden = !hits.length;
+  document.querySelector('#gfaTraceTable tbody').innerHTML = shown.map((f) => `
+    <tr>
+      <td style="white-space:nowrap; font-size:12px;">${escapeHtml(formatUtc(fnum(f[RF.ts])))}</td>
+      <td class="key">${escapeHtml(f[RF.clientIp])}</td>
+      <td><span class="${statusPillClass(f[RF.status])}">${escapeHtml(f[RF.status])}</span></td>
+      <td>${escapeHtml(f[RF.method])}</td>
+      <td class="key">${escapeHtml(safeDecode(f[RF.arl]).slice(0, 120))}</td>
+      <td class="key">${escapeHtml(gfaEntriesText(f, providers, v))}</td>
+    </tr>`).join('');
+}
+document.getElementById('gfaCard').addEventListener('click', (e) => {
+  const drill = e.target.closest('[data-gfa-drill]');
+  if (drill) {
+    const d = gfaDrills.get(drill.dataset.gfaDrill);
+    if (d) drillDown({ gfa: d.conds }, d.label);
+    return;
+  }
+  const traceDrill = e.target.closest('[data-gfa-trace-drill]');
+  if (traceDrill) {
+    drillDown({ gfa: [{ trace: traceDrill.dataset.gfaTraceDrill }] }, `GFA value ${traceDrill.dataset.gfaTraceDrill}`);
+    return;
+  }
+  const sel = e.target.closest('[data-gfa-select]');
+  if (sel) {
+    gfaSelected = gfaSelected === sel.dataset.gfaSelect ? null : sel.dataset.gfaSelect;
+    renderGfa();
+    if (gfaSelected) document.getElementById('gfaDetail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+  const trace = e.target.closest('[data-gfa-trace]');
+  if (trace) {
+    runGfaTrace(trace.dataset.gfaTrace);
+    document.getElementById('gfaTraceInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
+document.getElementById('gfaTraceBtn').addEventListener('click', () => runGfaTrace(document.getElementById('gfaTraceInput').value));
+document.getElementById('gfaTraceInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') runGfaTrace(e.target.value); });
+document.getElementById('gfaDictBtn').addEventListener('click', () => document.getElementById('gfaDictInput').click());
+document.getElementById('gfaDictInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const el = document.getElementById('gfaDictStatus');
+  try {
+    const text = await file.text();
+    gfaDict = validateGfaDictionary(JSON.parse(text));
+    try { localStorage.setItem(GFA_DICT_KEY, text); } catch (err) { /* storage unavailable/full: works for this tab only */ }
+    refreshGfa();
+  } catch (err) {
+    el.textContent = `Couldn't use ${file.name}: ${err.message}`;
+    el.style.color = 'var(--critical)';
+    return;
+  }
+  el.style.color = 'var(--text-muted)';
+});
+document.getElementById('gfaDictForgetBtn').addEventListener('click', () => {
+  gfaDict = null;
+  try { localStorage.removeItem(GFA_DICT_KEY); } catch (e) { /* ignore */ }
+  refreshGfa();
+});
 
 /* ---------- Mini AWK-subset interpreter + shell-pipe simulator ---------- */
 /* Supports: $N field refs, $0, $NF, NR, NF, numeric/string literals,

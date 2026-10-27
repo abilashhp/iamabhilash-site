@@ -10,6 +10,7 @@ const EXPORTS = [
   'RF', 'FF', 'SF', 'NBINS', 'MIN_N_FOR_P95', 'escapeHtml', 'splitFields', 'normalizeUri', 'normPathRegex', 'minMax',
   'buildDrillQuery', 'statusClassDrill', 'parseLogText', 'parseReportText', 'analyze', 'groupBy', 'GROUP_DIMS',
   'binIndexOf', 'makeRangePredicate', 'runQueryPipeline', 'translateEnglish',
+  'gfaParts', 'gfaEntries', 'analyzeGfa', 'buildGfaDrillQuery', 'gfaTrace', 'validateGfaDictionary', 'gfaMeaning',
 ];
 
 export function loadTool() {

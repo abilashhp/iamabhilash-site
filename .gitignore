@@ -22,3 +22,6 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# private GFA dictionaries (Akamai confidential) — never commit
+gfa-dictionary*.json
