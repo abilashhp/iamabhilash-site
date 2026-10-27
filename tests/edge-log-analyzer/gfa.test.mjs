@@ -50,11 +50,16 @@ test('no GFA column when nothing looks like one', () => {
 });
 
 // ---------- Drill-down parity: every number the section shows is reproduced by its AWK ----------
-function assertParity(dataset, dict, label) {
+function assertParity(dataset, dict, label, view = null) {
   const p = T.parseLogText(dataset.join('\n'));
-  const g = T.analyzeGfa(p.rLines, dict);
+  const g = T.analyzeGfa(p.rLines, dict, view);
   const col = p.report.gfaColumn;
   let checked = 0;
+  const within = g.viewDrill || [];
+  if (g.viewDrill) {
+    assert.equal(countLines(T.buildGfaDrillQuery(g.viewDrill, col), p.lines), g.withGfa, `${label}: view lines`);
+    checked++;
+  }
   for (const prov of g.providers) {
     assert.equal(countLines(T.buildGfaDrillQuery(prov.drill, col), p.lines), prov.n, `${label}: provider ${prov.key}`);
     checked++;
@@ -70,9 +75,9 @@ function assertParity(dataset, dict, label) {
     checked++;
   }
   for (const v of ['0.9', 'Bad', 'ab12', 'core', 'y%3Bz', p.rLines.find((f) => f.gfa && f.gfa.includes('//aa/')).gfa.split('/')[3]]) {
-    const n = T.gfaTrace(p.rLines, v).length;
-    assert.ok(n > 0, `${label}: trace ${v} finds something`);
-    assert.equal(countLines(T.buildGfaDrillQuery([{ trace: v }], col), p.lines), n, `${label}: trace ${v}`);
+    const n = T.gfaTrace(p.rLines, v, within, new Set(g.providerKeys)).length;
+    if (!view) assert.ok(n > 0, `${label}: trace ${v} finds something`);
+    assert.equal(countLines(T.buildGfaDrillQuery([{ trace: v }, ...within], col), p.lines), n, `${label}: trace ${v}`);
     checked++;
   }
   return { g, checked };
@@ -89,6 +94,35 @@ test('drill-down parity with a dictionary, r and S records mixed', () => {
   const { g, checked } = assertParity(realisticGfaDataset(T, { withS: true, seed: 11 }), T.validateGfaDictionary(GFA_TEST_DICT), 'dict + S');
   assert.ok(g.insights.length > 5);
   assert.ok(checked > 100, `checked ${checked}`);
+});
+
+test('a dictionary group view narrows everything and keeps drill parity', () => {
+  const dict = T.validateGfaDictionary(GFA_TEST_DICT);
+  const data = realisticGfaDataset(T, { withS: true, seed: 5 });
+  const { g, checked } = assertParity(data, dict, 'group view', { keys: dict.groups['Alpha and beta'] });
+  assert.deepEqual(g.viewKeys, ['nsa/aa', 'nsa/bb']); // nsa/nope is unknown, so dropped
+  assert.deepEqual(g.providers.map((x) => x.key).sort(), ['nsa/aa', 'nsa/bb']);
+  assert.ok(g.withGfa < g.gfaTotal && g.withGfa > 0);
+  assert.ok(g.insights.length && g.insights.every((x) => x.drill.every((c) => c.ns === 'nsa' && ['aa', 'bb'].includes(c.provider))));
+  assert.ok(!g.insights.some((x) => x.text === 'gamma present'));
+  for (const prov of g.providers) assert.ok(Math.abs(prov.share - prov.n / g.withGfa * 100) < 1e-9);
+  assert.ok(checked > 50, `checked ${checked}`);
+});
+
+test('a namespace view needs no dictionary and keeps drill parity', () => {
+  const { g } = assertParity(realisticGfaDataset(T, { seed: 9 }), null, 'ns view', { ns: 'nsb' });
+  assert.deepEqual(g.viewKeys, ['nsb/cc']);
+  assert.deepEqual(g.presentKeys, ['nsa/aa', 'nsa/bb', 'nsa/core', 'nsb/cc', 'nsc/@h']);
+});
+
+test('a view with no known provider matches nothing', () => {
+  const p = T.parseLogText(realisticGfaDataset(T, { n: 200 }).join('\n'));
+  const g = T.analyzeGfa(p.rLines, GFA_TEST_DICT, { keys: GFA_TEST_DICT.groups['Nothing known'] });
+  assert.deepEqual(g.viewKeys, []);
+  assert.equal(g.viewDrill, null);
+  assert.equal(g.withGfa, 0);
+  assert.deepEqual(g.providers, []);
+  assert.ok(g.gfaTotal > 0);
 });
 
 // ---------- Dictionary decoding ----------
@@ -138,6 +172,8 @@ test('dictionary validation explains what is wrong', () => {
   assert.throws(() => T.validateGfaDictionary({ providers: { aa: {} } }), /namespace\/provider/);
   assert.throws(() => T.validateGfaDictionary({ providers: { 'n/a': { fields: {} } } }), /"fields" should be an array/);
   assert.throws(() => T.validateGfaDictionary({ providers: {}, insights: {} }), /"insights"/);
+  assert.throws(() => T.validateGfaDictionary({ providers: {}, groups: [] }), /"groups"/);
+  assert.throws(() => T.validateGfaDictionary({ providers: {}, groups: { x: 'n/a' } }), /group "x"/);
   assert.equal(T.validateGfaDictionary(GFA_TEST_DICT), GFA_TEST_DICT);
 });
 
@@ -158,6 +194,7 @@ test('index.html contains none of the private GFA dictionary wording', { skip: !
     }
   }
   for (const i of dict.insights || []) add(i.text);
+  for (const name of Object.keys(dict.groups || {})) add(name);
   const leaked = [...strings].filter((s) => html.includes(s));
   assert.deepEqual(leaked, []);
   assert.ok(strings.size > 50, `only ${strings.size} strings checked`);

@@ -102,6 +102,11 @@ export const GFA_TEST_DICT = {
     'nsa/core': { title: 'Core marker', fields: [{ name: 'SID', trace: true }, { name: 'WHY' }] },
     'nsb/cc': { title: 'Gamma', fields: [{ name: 'SID', trace: true }, { name: 'HIT' }] },
   },
+  groups: {
+    'Alpha and beta': ['nsa/aa', 'nsa/bb', 'nsa/nope'],
+    'Gamma only': ['nsb/cc'],
+    'Nothing known': ['nsz/zz'],
+  },
   insights: [
     { provider: 'nsa/aa', when: { CODE: ['1', '2'], SCORE: '0.9' }, severity: 'critical', text: 'retried or dropped, yet scored high' },
     { provider: 'nsa/aa', when: { STATE: 'Gone', 2: 'Gone' }, severity: 'info', text: 'state gone (field named twice)' },

@@ -203,10 +203,23 @@ try {
   await clickSelector('#resetRangeBtn');
   await sleep(500);
 
+  await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'g:Alpha and beta'; s.dispatchEvent(new Event('change')); })()`);
+  await sleep(300);
+  const view = await evaluate(`({ summary: document.getElementById('gfaSummary').textContent, rows: [...document.querySelectorAll('#gfaProviderTable tbody td.key')].map((td) => td.textContent), n: gfaResult.withGfa, all: gfaResult.gfaTotal })`);
+  await clickSelector('#gfaSummary [data-gfa-drill]');
+  await sleep(500);
+  const viewStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
+  check('a dictionary group view shows only its providers and its "lines" reproduce its count', view.summary.startsWith('View "Alpha and beta"') && view.rows.sort().join() === 'nsa/aa,nsa/bb' && view.n < view.all && viewStatus.includes(`: ${view.n} output line(s)`), JSON.stringify({ ...view, viewStatus }));
+  await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'ns:nsb'; s.dispatchEvent(new Event('change')); })()`);
+  await sleep(300);
+  const nsRows = await evaluate(`[...document.querySelectorAll('#gfaProviderTable tbody td.key')].map((td) => td.textContent).join()`);
+  check('a namespace view needs no dictionary group', nsRows === 'nsb/cc', nsRows);
+  await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'g:Gamma only'; s.dispatchEvent(new Event('change')); })()`);
+
   await clickSelector('#gfaDictForgetBtn');
   await sleep(300);
-  const forgot = await evaluate(`({ hidden: document.getElementById('gfaInsightsBox').hidden, stored: localStorage.getItem('edgeLogAnalyzer.gfaDictionary'), status: document.getElementById('gfaDictStatus').textContent })`);
-  check('"Forget dictionary" drops insights and the stored copy', forgot.hidden && forgot.stored === null && /No dictionary loaded/.test(forgot.status), JSON.stringify(forgot));
+  const forgot = await evaluate(`({ hidden: document.getElementById('gfaInsightsBox').hidden, stored: localStorage.getItem('edgeLogAnalyzer.gfaDictionary'), status: document.getElementById('gfaDictStatus').textContent, view: document.getElementById('gfaView').value })`);
+  check('"Forget dictionary" drops insights, the stored copy and its group view', forgot.hidden && forgot.stored === null && /No dictionary loaded/.test(forgot.status) && forgot.view === '', JSON.stringify(forgot));
 
   // --- S records: counted, and drill-downs / quick queries include them ---
   await evaluate(`analyzeText(${JSON.stringify(realisticDataset(T, { withS: true }).join('\n'))}, 'e2e with S')`);
