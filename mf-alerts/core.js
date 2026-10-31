@@ -6,18 +6,20 @@
 // (5% by default): at -5%, again at -10%, -15%…; a fund that recovers to less
 // than one step down re-arms. NAVs come from mfapi.in (AMFI data).
 //
-// There is no login yet, so the site can't be used as an open mail relay:
-// mail only ever goes to addresses in the ALLOWED_EMAILS setting
-// (comma-separated). Without it nothing is sent.
+// Each portfolio belongs to a signed-in user (auth.js) and alerts go only to
+// that owner's address, sent from Gmail (mail.js). Owners whose access is
+// revoked stop getting alerts.
 //
 // KV layout (binding MF_KV):
-//   portfolios  [{ id, name, emails[], thresholdPct, funds: [{ schemeCode, schemeName, units? }] }]
+//   portfolios  [{ id, owner, name, thresholdPct, funds: [{ schemeCode, schemeName, units? }] }]
 //   state       { [portfolioId]: { [schemeCode]: { alertedStepPct, drawdownPct, peakNav, peakDate, latestDate, alertedAt } } }
 //   lastRun     summary of the most recent scheduled or manual run
 
+import { getAccess, hasAccess } from './auth.js';
+
 export const DEFAULT_THRESHOLD = 5;
 export const LOOKBACK_DAYS = 365;
-export const LIMITS = { portfolios: 20, fundsPerPortfolio: 40, emails: 5, distinctSchemes: 45 };
+export const LIMITS = { portfolios: 30, portfoliosPerUser: 10, fundsPerPortfolio: 40, distinctSchemes: 45 };
 const NAV_API = 'https://api.mfapi.in/mf/';
 const DAY_MS = 86400000;
 
@@ -136,25 +138,13 @@ export function renderAlertEmail(portfolio, alerts, siteUrl) {
   return { subject, text, html };
 }
 
-const EMAIL_RE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[A-Za-z]{2,}$/;
-export function allowedEmails(env) {
-  return new Set(String(env.ALLOWED_EMAILS || '').split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean));
-}
 // Normalizes and checks a portfolio from the API. Throws Error with a message
-// fit to show the user. `allowed`: the ALLOWED_EMAILS set; recipients must be in it.
-export function validatePortfolio(input, { allowed } = {}) {
+// fit to show the user. The owner is set by the API from the session, never
+// taken from the request.
+export function validatePortfolio(input) {
   if (!input || typeof input !== 'object') throw new Error('Expected a portfolio object.');
   const name = String(input.name || '').trim();
   if (!name || name.length > 80) throw new Error('Give the portfolio a name (up to 80 characters).');
-  const emails = [...new Set((Array.isArray(input.emails) ? input.emails : String(input.emails || '').split(/[,;\s]+/))
-    .map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
-  if (!emails.length) throw new Error('Add at least one email address.');
-  if (emails.length > LIMITS.emails) throw new Error(`At most ${LIMITS.emails} email addresses per portfolio.`);
-  for (const e of emails) if (!EMAIL_RE.test(e) || e.length > 254) throw new Error(`"${e}" doesn't look like an email address.`);
-  if (allowed) {
-    if (!allowed.size) throw new Error('No approved recipients are configured on this site (ALLOWED_EMAILS), so alerts can\'t be saved yet.');
-    for (const e of emails) if (!allowed.has(e)) throw new Error(`${e} isn't on this site's approved recipient list, so it can't receive alerts.`);
-  }
   const thresholdPct = input.thresholdPct === undefined || input.thresholdPct === '' ? DEFAULT_THRESHOLD : Number(input.thresholdPct);
   if (!(thresholdPct >= 1 && thresholdPct <= 50)) throw new Error('Alert step must be between 1% and 50%.');
   const funds = Array.isArray(input.funds) ? input.funds : [];
@@ -172,7 +162,7 @@ export function validatePortfolio(input, { allowed } = {}) {
     return { schemeCode, schemeName, units };
   });
   const id = input.id && /^[a-z0-9-]{6,40}$/.test(input.id) ? input.id : null;
-  return { id, name, emails, thresholdPct: +thresholdPct.toFixed(2), funds: clean };
+  return { id, name, thresholdPct: +thresholdPct.toFixed(2), funds: clean };
 }
 
 // mfapi.in is a free service that occasionally times out, so each fetch has a
@@ -203,55 +193,46 @@ export async function loadNavInfo(codes, fetchImpl = fetch, fetchOpts) {
   return navInfo;
 }
 
-export async function sendEmail(env, { to, subject, html, text }, fetchImpl = fetch) {
-  if (!env.RESEND_API_KEY) return { skipped: 'RESEND_API_KEY not set — email not sent' };
-  const res = await fetchImpl('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: env.MAIL_FROM, to, subject, html, text }),
-  });
-  if (!res.ok) throw new Error(`Resend returned HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  return { id: (await res.json()).id };
-}
-
 export async function readJson(kv, key, fallback) {
   const v = await kv.get(key, 'json');
   return v ?? fallback;
 }
 
 // The whole check. dryRun: compute and report only — no email, no state change
-// (what the site's status view uses). A portfolio whose email fails keeps its
-// old state, so the alert is retried on the next run.
-export async function runChecks(env, { dryRun = false, fetchImpl = fetch, fetchOpts, now = new Date(), trigger = 'scheduled' } = {}) {
+// (what the site's status view uses). owner: only that user's portfolios
+// (others' state is left as is). A portfolio whose email fails keeps its old
+// state, so the alert is retried on the next run.
+// mailer: async ({ to, subject, text, html }) => { id } | { skipped } (mail.js).
+export async function runChecks(env, { dryRun = false, owner = null, mailer = null, fetchImpl = fetch, fetchOpts, now = new Date(), trigger = 'scheduled' } = {}) {
   const kv = env.MF_KV;
-  const portfolios = await readJson(kv, 'portfolios', []);
+  const all = await readJson(kv, 'portfolios', []);
+  const portfolios = owner ? all.filter((p) => p.owner === owner) : all;
   const state = await readJson(kv, 'state', {});
+  const access = await getAccess(kv);
   const navInfo = await loadNavInfo(portfolios.flatMap((p) => p.funds.map((f) => f.schemeCode)), fetchImpl, fetchOpts);
   const siteUrl = env.SITE_URL || 'https://www.iamabhilash.in';
-  const allowed = allowedEmails(env);
   const results = [];
-  const nextState = {};
+  // A full run rebuilds state (dropping deleted portfolios); a per-owner run keeps everyone else's.
+  const nextState = owner ? { ...state } : {};
   for (const p of portfolios) {
     const { rows, alerts, nextState: ps } = evaluatePortfolio(p, navInfo, state[p.id] || {}, now);
-    const result = { id: p.id, name: p.name, rows, alerts: alerts.map((a) => ({ schemeCode: a.schemeCode, schemeName: a.schemeName, drawdownPct: a.drawdownPct, stepPct: a.stepPct })) };
+    const result = { id: p.id, name: p.name, owner: p.owner, rows, alerts: alerts.map((a) => ({ schemeCode: a.schemeCode, schemeName: a.schemeName, drawdownPct: a.drawdownPct, stepPct: a.stepPct })) };
     nextState[p.id] = ps;
     if (alerts.length && !dryRun) {
-      // Re-checked at send time: the list may have changed since the portfolio was saved.
-      const to = p.emails.filter((e) => allowed.has(e));
       try {
-        result.email = to.length
-          ? await sendEmail(env, { to, ...renderAlertEmail(p, alerts, siteUrl) }, fetchImpl)
-          : { skipped: 'none of its addresses are in ALLOWED_EMAILS — email not sent' };
-        if (result.email.skipped) nextState[p.id] = state[p.id] || {};
+        // Access is checked at send time: a revoked owner gets nothing.
+        if (!hasAccess(env, access, p.owner)) result.email = { skipped: `${p.owner} no longer has access — email not sent` };
+        else if (!mailer) result.email = { skipped: 'no mailer configured — email not sent' };
+        else result.email = await mailer({ to: [p.owner], ...renderAlertEmail(p, alerts, siteUrl) });
       } catch (err) {
         result.email = { error: err.message };
-        nextState[p.id] = state[p.id] || {};
       }
+      if (!result.email.id) nextState[p.id] = state[p.id] || {};
     }
     results.push(result);
   }
   const summary = {
-    at: now.toISOString(), trigger, dryRun,
+    at: now.toISOString(), trigger, dryRun, owner,
     portfolios: results.length,
     alertsSent: results.filter((r) => r.email && r.email.id).reduce((n, r) => n + r.alerts.length, 0),
     errors: [
@@ -261,7 +242,8 @@ export async function runChecks(env, { dryRun = false, fetchImpl = fetch, fetchO
   };
   if (!dryRun) {
     await kv.put('state', JSON.stringify(nextState));
-    await kv.put('lastRun', JSON.stringify(summary));
+    // lastRun records the scheduled (all-portfolio) runs; per-user manual runs don't overwrite it.
+    if (!owner) await kv.put('lastRun', JSON.stringify(summary));
   }
   return { summary, results };
 }

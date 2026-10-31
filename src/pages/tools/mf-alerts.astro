@@ -14,9 +14,50 @@ import Layout from '../../layouts/Layout.astro';
         <p class="sub">Emails you when a fund's NAV falls a set step (5% by default) below its 52-week high, and again at each further step. Checked daily at 09:00 IST with AMFI NAVs from mfapi.in.</p>
     </header>
 
-    <p class="notice">No login yet: anyone with this link can view and change these portfolios. Alerts only ever go to the site's approved email addresses.</p>
+    <section id="signin" class="card" hidden>
+        <div class="label">Sign in</div>
+        <p class="hint">Enter your email. If it has access, you'll get a 6-digit code to sign in — no password.</p>
+        <form id="codeForm" class="row">
+            <input id="siEmail" type="email" autocomplete="email" placeholder="you@example.com" required>
+            <button class="btn primary" type="submit">Email me a code</button>
+        </form>
+        <form id="verifyForm" class="row" hidden>
+            <input id="siCode" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="6-digit code" required>
+            <button class="btn primary" type="submit">Sign in</button>
+            <button class="btn" type="button" id="siBack">Use another email</button>
+        </form>
+        <p id="siMsg" class="msg"></p>
+        <div id="requestBox" hidden>
+            <div class="label" style="margin-top:10px;">Request access</div>
+            <p class="hint">The site owner approves new people; you'll get an email once you're in.</p>
+            <div class="row">
+                <input id="reqNote" type="text" maxlength="300" placeholder="Optional note — who you are">
+                <button class="btn" id="reqBtn" type="button">Request access</button>
+            </div>
+        </div>
+    </section>
 
-    <div id="app">
+    <div id="userBar" class="userbar" hidden>
+        <span>Signed in as <b id="meEmail"></b></span>
+        <button id="signOutBtn" class="btn sm">Sign out</button>
+    </div>
+
+    <section id="accessPanel" class="card" hidden>
+        <div class="label">Access</div>
+        <p class="hint">Only these emails can sign in. Each person sees only their own portfolios, and alerts go only to their own address.</p>
+        <form id="grantForm" class="row">
+            <input id="grantEmail" type="email" placeholder="Email to give access to" required>
+            <button class="btn primary" type="submit">Give access</button>
+        </form>
+        <p id="accessMsg" class="msg"></p>
+        <div id="requestsBox"></div>
+        <table class="tbl">
+            <thead><tr><th>Has access</th><th>Since</th><th></th></tr></thead>
+            <tbody id="usersBody"></tbody>
+        </table>
+    </section>
+
+    <div id="app" hidden>
         <div class="toolbar">
             <button id="newBtn" class="btn primary">+ New portfolio</button>
             <button id="refreshBtn" class="btn">Refresh NAVs</button>
@@ -30,7 +71,6 @@ import Layout from '../../layouts/Layout.astro';
                 <label>Name<input id="pName" type="text" maxlength="80" placeholder="e.g. My holdings"></label>
                 <label>Alert step (%)<input id="pStep" type="number" min="1" max="50" step="0.5" value="5"></label>
             </div>
-            <label class="full">Email addresses (comma-separated)<input id="pEmails" type="text" placeholder="you@example.com"></label>
             <div class="label" style="margin-top:14px;">Funds</div>
             <p class="hint">Search by name and pick the exact plan (Direct/Regular, Growth/IDCW). Units are optional — they only add the holding value to emails.</p>
             <div class="search">
@@ -59,7 +99,7 @@ import Layout from '../../layouts/Layout.astro';
     const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const fmtPct = (n) => (n > 0 ? '-' : '') + Math.abs(n).toFixed(2) + '%';
     const fmtInr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
-    let portfolios = [], results = [], editing = null, draftFunds = [];
+    let portfolios = [], results = [], editing = null, draftFunds = [], me = null, siEmail = '';
 
     function setMsg(el, text, kind) { el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
 
@@ -70,9 +110,104 @@ import Layout from '../../layouts/Layout.astro';
         });
         let body = {};
         try { body = await res.json(); } catch { /* non-JSON error page */ }
-        if (!res.ok) throw new Error(body.error || body.skipped || `HTTP ${res.status}`);
+        if (res.status === 401 && body.signedOut) showSignIn('Your session ended — sign in again.');
+        if (!res.ok) throw Object.assign(new Error(body.error || body.skipped || `HTTP ${res.status}`), { body });
         return body;
     }
+
+    function showSignIn(message) {
+        me = null;
+        $('app').hidden = true; $('userBar').hidden = true; $('accessPanel').hidden = true; $('editor').hidden = true;
+        $('signin').hidden = false; $('codeForm').hidden = false; $('verifyForm').hidden = true; $('requestBox').hidden = true;
+        setMsg($('siMsg'), message || '', message ? 'err' : '');
+    }
+    async function showApp(user) {
+        me = user;
+        $('signin').hidden = true; $('app').hidden = false; $('userBar').hidden = false;
+        $('meEmail').textContent = user.email;
+        $('accessPanel').hidden = !user.admin;
+        if (user.admin) loadAccess();
+        await load();
+    }
+
+    $('codeForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        siEmail = $('siEmail').value.trim().toLowerCase();
+        $('requestBox').hidden = true;
+        setMsg($('siMsg'), 'Sending code…');
+        try {
+            await api('auth/code', { method: 'POST', body: JSON.stringify({ email: siEmail }) });
+            $('codeForm').hidden = true; $('verifyForm').hidden = false; $('siCode').value = ''; $('siCode').focus();
+            setMsg($('siMsg'), `Code sent to ${siEmail} — check your inbox (and spam). It expires in 10 minutes.`, 'ok');
+        } catch (err) {
+            setMsg($('siMsg'), err.message, 'err');
+            if (err.body && err.body.noAccess) $('requestBox').hidden = false;
+        }
+    });
+    $('verifyForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        setMsg($('siMsg'), 'Checking…');
+        try {
+            const user = await api('auth/verify', { method: 'POST', body: JSON.stringify({ email: siEmail, code: $('siCode').value }) });
+            setMsg($('siMsg'), '');
+            await showApp(user);
+        } catch (err) { setMsg($('siMsg'), err.message, 'err'); }
+    });
+    $('siBack').addEventListener('click', () => showSignIn());
+    $('reqBtn').addEventListener('click', async () => {
+        try {
+            const r = await api('access/request', { method: 'POST', body: JSON.stringify({ email: siEmail, note: $('reqNote').value }) });
+            const text = { requested: "Request sent — you'll get an email once you're in.", pending: 'Your request is already waiting for approval.', already: 'This email already has access — ask for a code above.' }[r.status];
+            setMsg($('siMsg'), text, 'ok');
+            $('requestBox').hidden = true;
+        } catch (err) { setMsg($('siMsg'), err.message, 'err'); }
+    });
+    $('signOutBtn').addEventListener('click', async () => {
+        try { await api('auth/logout', { method: 'POST' }); } catch { /* signed out either way */ }
+        showSignIn();
+    });
+
+    async function loadAccess() {
+        try {
+            const a = await api('access');
+            $('requestsBox').innerHTML = a.requests.length ? `
+                <div class="label" style="margin-top:6px;">Waiting for approval</div>
+                <table class="tbl"><tbody>${a.requests.map((r) => `
+                    <tr>
+                        <td>${esc(r.email)}<div class="small">${esc(r.note || 'no note')} · ${esc(new Date(r.at).toLocaleString())}</div></td>
+                        <td class="num"><button class="btn sm primary" data-approve="${esc(r.email)}">Approve</button> <button class="btn sm" data-dismiss="${esc(r.email)}">Dismiss</button></td>
+                    </tr>`).join('')}</tbody></table>` : '';
+            $('usersBody').innerHTML = `<tr><td>${esc(me.email)} <span class="small">(you · master)</span></td><td class="small">always</td><td></td></tr>` + a.users.map((u) => `
+                <tr>
+                    <td>${esc(u.email)}</td>
+                    <td class="small">${esc(new Date(u.grantedAt).toLocaleDateString())}</td>
+                    <td class="num"><button class="btn sm danger" data-revoke="${esc(u.email)}">Revoke</button></td>
+                </tr>`).join('');
+        } catch (err) { setMsg($('accessMsg'), err.message, 'err'); }
+    }
+    async function grant(email) {
+        setMsg($('accessMsg'), 'Giving access…');
+        try {
+            const r = await api('access/grant', { method: 'POST', body: JSON.stringify({ email }) });
+            setMsg($('accessMsg'), r.invited ? `${r.email} can now sign in — invite emailed.` : `${r.email} can now sign in${r.inviteError ? ` (invite email failed: ${r.inviteError})` : ''}.`, r.inviteError ? 'err' : 'ok');
+            await loadAccess();
+        } catch (err) { setMsg($('accessMsg'), err.message, 'err'); }
+    }
+    $('grantForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await grant($('grantEmail').value);
+        $('grantEmail').value = '';
+    });
+    $('accessPanel').addEventListener('click', async (e) => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        if (b.dataset.approve) await grant(b.dataset.approve);
+        if (b.dataset.dismiss) { await api('access/dismiss', { method: 'POST', body: JSON.stringify({ email: b.dataset.dismiss }) }).catch(() => {}); await loadAccess(); }
+        if (b.dataset.revoke && confirm(`Revoke access for ${b.dataset.revoke}? Their portfolios are kept but they stop getting alerts.`)) {
+            try { await api('access/revoke', { method: 'POST', body: JSON.stringify({ email: b.dataset.revoke }) }); setMsg($('accessMsg'), `${b.dataset.revoke} can no longer sign in.`, 'ok'); await loadAccess(); }
+            catch (err) { setMsg($('accessMsg'), err.message, 'err'); }
+        }
+    });
 
     async function load() {
         setMsg($('appMsg'), 'Loading NAVs…');
@@ -101,7 +236,7 @@ import Layout from '../../layouts/Layout.astro';
                 <div class="row between">
                     <div>
                         <div class="pname">${esc(p.name)}</div>
-                        <div class="small">${esc(p.emails.join(', '))} · step ${esc(p.thresholdPct)}%</div>
+                        <div class="small">alerts to ${esc(p.owner)} · step ${esc(p.thresholdPct)}%</div>
                     </div>
                     <div class="row">
                         <button class="btn sm" data-edit="${esc(p.id)}">Edit</button>
@@ -136,7 +271,6 @@ import Layout from '../../layouts/Layout.astro';
         draftFunds = p ? p.funds.map((f) => ({ ...f })) : [];
         $('editorTitle').textContent = p ? `Edit “${p.name}”` : 'New portfolio';
         $('pName').value = p ? p.name : '';
-        $('pEmails').value = p ? p.emails.join(', ') : '';
         $('pStep').value = p ? p.thresholdPct : 5;
         $('fundSearch').value = ''; $('searchResults').hidden = true;
         setMsg($('editorMsg'), '');
@@ -186,7 +320,7 @@ import Layout from '../../layouts/Layout.astro';
     });
 
     $('saveBtn').addEventListener('click', async () => {
-        const body = { id: editing || undefined, name: $('pName').value, emails: $('pEmails').value, thresholdPct: $('pStep').value, funds: draftFunds };
+        const body = { id: editing || undefined, name: $('pName').value, thresholdPct: $('pStep').value, funds: draftFunds };
         setMsg($('editorMsg'), 'Saving…');
         try {
             await api('portfolios', { method: 'POST', body: JSON.stringify(body) });
@@ -224,7 +358,7 @@ import Layout from '../../layouts/Layout.astro';
         }
     });
 
-    load();
+    api('me').then((u) => (u.email ? showApp(u) : showSignIn())).catch((err) => showSignIn(err.message));
 })();
 </script>
 
@@ -239,7 +373,10 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 .page-hdr { text-align: center; margin-bottom: 28px; }
 h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 .sub { color: #a1a1aa; font-size: 0.85rem; max-width: 640px; margin: 0 auto; line-height: 1.6; }
-.notice { font-size: 0.8rem; color: #fcd34d; background: rgba(250,204,21,0.08); border: 1px solid rgba(250,204,21,0.25); border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; }
+.userbar { display: flex; justify-content: flex-end; align-items: center; gap: 10px; font-size: 0.8rem; color: #a1a1aa; margin-bottom: 12px; }
+.userbar b { color: #e2e8f0; font-weight: 600; }
+#signin .row input, #grantForm input { flex: 1; min-width: 220px; }
+#signin { max-width: 560px; margin: 0 auto 16px; }
 .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 16px; }
 .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 4px; }
 .hint { font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px; line-height: 1.5; }

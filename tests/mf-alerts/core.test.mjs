@@ -2,8 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  drawdownFromHistory, alertLevel, evaluatePortfolio, renderAlertEmail, validatePortfolio, runChecks, allowedEmails,
+  drawdownFromHistory, alertLevel, evaluatePortfolio, renderAlertEmail, validatePortfolio, runChecks,
 } from '../../mf-alerts/core.js';
+import { fakeKv, fakeMailer } from './fakes.mjs';
 
 const DAY = 86400000;
 const ddmmyyyy = (t) => { const d = new Date(t); return `${String(d.getUTCDate()).padStart(2, '0')}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${d.getUTCFullYear()}`; };
@@ -94,12 +95,10 @@ test('alert email escapes names and summarizes the alerts', () => {
 
 // ---------- Validation ----------
 test('portfolio validation normalizes input and explains problems', () => {
-  const ok = validatePortfolio({ name: ' Mine ', emails: 'A@x.com, b@y.in;a@x.com', thresholdPct: '', funds: [{ schemeCode: 122639, schemeName: 'PPFAS', units: '12.5' }, { schemeCode: '119551' }] });
-  assert.deepEqual(ok, { id: null, name: 'Mine', emails: ['a@x.com', 'b@y.in'], thresholdPct: 5, funds: [{ schemeCode: '122639', schemeName: 'PPFAS', units: 12.5 }, { schemeCode: '119551', schemeName: 'Scheme 119551', units: null }] });
-  const base = { name: 'n', emails: 'a@x.com', funds: [{ schemeCode: '1234' }] };
+  const ok = validatePortfolio({ name: ' Mine ', thresholdPct: '', owner: 'attacker@x.com', funds: [{ schemeCode: 122639, schemeName: 'PPFAS', units: '12.5' }, { schemeCode: '119551' }] });
+  assert.deepEqual(ok, { id: null, name: 'Mine', thresholdPct: 5, funds: [{ schemeCode: '122639', schemeName: 'PPFAS', units: 12.5 }, { schemeCode: '119551', schemeName: 'Scheme 119551', units: null }] });
+  const base = { name: 'n', funds: [{ schemeCode: '1234' }] };
   assert.throws(() => validatePortfolio({ ...base, name: '' }), /name/);
-  assert.throws(() => validatePortfolio({ ...base, emails: 'not-an-email' }), /doesn't look like an email/);
-  assert.throws(() => validatePortfolio({ ...base, emails: '' }), /at least one email/);
   assert.throws(() => validatePortfolio({ ...base, thresholdPct: 0.5 }), /between 1% and 50%/);
   assert.throws(() => validatePortfolio({ ...base, funds: [] }), /at least one fund/);
   assert.throws(() => validatePortfolio({ ...base, funds: [{ schemeCode: 'abc' }] }), /AMFI scheme code/);
@@ -108,58 +107,36 @@ test('portfolio validation normalizes input and explains problems', () => {
   assert.equal(validatePortfolio({ ...base, id: 'bad id!' }).id, null);
 });
 
-test('recipients must be on ALLOWED_EMAILS when a list is given', () => {
-  const allowed = allowedEmails({ ALLOWED_EMAILS: ' Me@X.com, family@y.in ' });
-  assert.deepEqual([...allowed], ['me@x.com', 'family@y.in']);
-  const base = { name: 'n', funds: [{ schemeCode: '1234' }] };
-  assert.deepEqual(validatePortfolio({ ...base, emails: 'ME@x.com' }, { allowed }).emails, ['me@x.com']);
-  assert.throws(() => validatePortfolio({ ...base, emails: 'me@x.com, stranger@z.com' }, { allowed }), /stranger@z\.com isn't on this site's approved recipient list/);
-  assert.throws(() => validatePortfolio({ ...base, emails: 'me@x.com' }, { allowed: allowedEmails({}) }), /No approved recipients are configured/);
-});
-
 // ---------- Full run against fakes ----------
-function fakeKv(initial = {}) {
-  const store = new Map(Object.entries(initial).map(([k, v]) => [k, JSON.stringify(v)]));
-  return {
-    store, writes: 0,
-    async get(k, type) { const v = store.get(k); return v === undefined ? null : type === 'json' ? JSON.parse(v) : v; },
-    async put(k, v) { this.writes++; store.set(k, v); },
-  };
-}
-function fakeFetch(navsByCode, { resendFails = false } = {}) {
-  const calls = { nav: [], emails: [] };
-  const impl = async (url, opts = {}) => {
-    if (url.startsWith('https://api.mfapi.in/mf/')) {
-      const code = url.split('/').pop();
-      calls.nav.push(code);
-      const navs = navsByCode[code];
-      if (!navs) return new Response('{}', { status: 502 });
-      return new Response(JSON.stringify({ data: history(navs), status: 'SUCCESS' }));
-    }
-    if (url === 'https://api.resend.com/emails') {
-      if (resendFails) return new Response('rate limited', { status: 429 });
-      calls.emails.push(JSON.parse(opts.body));
-      return new Response(JSON.stringify({ id: `em_${calls.emails.length}` }));
-    }
-    throw new Error('unexpected fetch ' + url);
+function fakeNav(navsByCode) {
+  const calls = [];
+  const impl = async (url) => {
+    const code = url.split('/').pop();
+    calls.push(code);
+    const navs = navsByCode[code];
+    if (!navs) return new Response('{}', { status: 502 });
+    return new Response(JSON.stringify({ data: history(navs), status: 'SUCCESS' }));
   };
   return { impl, calls };
 }
 const PORTFOLIOS = [
-  { id: 'p1', name: 'Mine', emails: ['me@x.com'], thresholdPct: 5, funds: [{ schemeCode: '111', schemeName: 'Falling Fund' }, { schemeCode: '222', schemeName: 'Steady Fund' }] },
-  { id: 'p2', name: 'Family', emails: ['a@x.com', 'b@x.com'], thresholdPct: 5, funds: [{ schemeCode: '111', schemeName: 'Falling Fund' }] },
-  { id: 'p3', name: 'Broken', emails: ['c@x.com'], thresholdPct: 5, funds: [{ schemeCode: '999', schemeName: 'Missing Fund' }] },
+  { id: 'p1', owner: 'me@x.com', name: 'Mine', thresholdPct: 5, funds: [{ schemeCode: '111', schemeName: 'Falling Fund' }, { schemeCode: '222', schemeName: 'Steady Fund' }] },
+  { id: 'p2', owner: 'mom@x.com', name: 'Mom', thresholdPct: 5, funds: [{ schemeCode: '111', schemeName: 'Falling Fund' }] },
+  { id: 'p3', owner: 'me@x.com', name: 'Broken', thresholdPct: 5, funds: [{ schemeCode: '999', schemeName: 'Missing Fund' }] },
 ];
-const ENV = (kv) => ({ MF_KV: kv, RESEND_API_KEY: 'k', MAIL_FROM: 'MF <alerts@iamabhilash.in>', SITE_URL: 'https://www.iamabhilash.in', ALLOWED_EMAILS: 'me@x.com,a@x.com,b@x.com,c@x.com' });
+const ACCESS = { users: { 'mom@x.com': { grantedAt: '2026-11-01T00:00:00Z', grantedBy: 'me@x.com' } }, requests: {} };
+const ENV = (kv) => ({ MF_KV: kv, MASTER_EMAIL: 'me@x.com', SITE_URL: 'https://www.iamabhilash.in' });
+const FAST = { backoffMs: 1 };
 
-test('a run emails each portfolio with new alerts once, fetches each scheme once, and records state', async () => {
-  const kv = fakeKv({ portfolios: PORTFOLIOS });
-  const { impl, calls } = fakeFetch({ 111: [93, 100], 222: [100, 99] });
-  const { summary, results } = await runChecks(ENV(kv), { fetchImpl: impl, fetchOpts: { backoffMs: 1 } });
+test('a run emails each owner once, fetches each scheme once, and records state', async () => {
+  const kv = fakeKv({ portfolios: PORTFOLIOS, access: ACCESS });
+  const nav = fakeNav({ 111: [93, 100], 222: [100, 99] });
+  const { mailer, sent } = fakeMailer();
+  const { summary, results } = await runChecks(ENV(kv), { fetchImpl: nav.impl, fetchOpts: FAST, mailer });
   // '111' is in two portfolios but fetched once; the failing '999' gets 3 attempts.
-  assert.deepEqual(calls.nav.sort(), ['111', '222', '999', '999', '999']);
-  assert.deepEqual(calls.emails.map((e) => e.to), [['me@x.com'], ['a@x.com', 'b@x.com']]);
-  assert.equal(calls.emails[0].from, 'MF <alerts@iamabhilash.in>');
+  assert.deepEqual(nav.calls.sort(), ['111', '222', '999', '999', '999']);
+  assert.deepEqual(sent.map((m) => m.to), [['me@x.com'], ['mom@x.com']]);
+  assert.match(sent[0].subject, /Falling Fund is 7\.0% below its 52-week high/);
   assert.equal(summary.alertsSent, 2);
   assert.deepEqual(summary.errors, ['scheme 999: NAV source returned HTTP 502']);
   assert.equal(results[2].rows[0].error, 'NAV source returned HTTP 502');
@@ -168,61 +145,65 @@ test('a run emails each portfolio with new alerts once, fetches each scheme once
   assert.equal(state.p1['222'].alertedStepPct, 0);
   assert.ok(kv.store.get('lastRun'));
 
-  // Same NAVs again: nothing new to say.
-  const again = fakeFetch({ 111: [93, 100], 222: [100, 99] });
-  const r2 = await runChecks(ENV(kv), { fetchImpl: again.impl });
-  assert.equal(again.calls.emails.length, 0);
+  const again = fakeMailer();
+  const r2 = await runChecks(ENV(kv), { fetchImpl: fakeNav({ 111: [93, 100], 222: [100, 99] }).impl, fetchOpts: FAST, mailer: again.mailer });
+  assert.equal(again.sent.length, 0);
   assert.equal(r2.summary.alertsSent, 0);
+});
+
+test('a revoked owner gets no email and their alert stays pending', async () => {
+  const kv = fakeKv({ portfolios: [PORTFOLIOS[1]], access: { users: {}, requests: {} } });
+  const { mailer, sent } = fakeMailer();
+  const r = await runChecks(ENV(kv), { fetchImpl: fakeNav({ 111: [93, 100] }).impl, mailer });
+  assert.equal(sent.length, 0);
+  assert.match(r.summary.errors[0], /mom@x\.com no longer has access/);
+  assert.deepEqual(JSON.parse(kv.store.get('state')), { p2: {} });
 });
 
 test('a NAV fetch that times out is retried, then reported', async () => {
   let n = 0;
   const flaky = async () => { n++; if (n < 3) throw new DOMException('timed out', 'TimeoutError'); return new Response(JSON.stringify({ data: history([90, 100]) })); };
-  const kv = fakeKv({ portfolios: [{ ...PORTFOLIOS[0], funds: [PORTFOLIOS[0].funds[0]] }] });
-  const r = await runChecks({ ...ENV(kv), RESEND_API_KEY: undefined }, { fetchImpl: flaky, fetchOpts: { backoffMs: 1 }, dryRun: true });
+  const kv = fakeKv({ portfolios: [{ ...PORTFOLIOS[0], funds: [PORTFOLIOS[0].funds[0]] }], access: ACCESS });
+  const r = await runChecks(ENV(kv), { fetchImpl: flaky, fetchOpts: FAST, dryRun: true });
   assert.equal(n, 3);
   assert.equal(r.results[0].rows[0].drawdownPct, 10);
 });
 
 test('a failed email keeps the old state so the alert is retried; dry runs write nothing', async () => {
-  const kv = fakeKv({ portfolios: [PORTFOLIOS[0]] });
-  const failing = fakeFetch({ 111: [93, 100], 222: [100] }, { resendFails: true });
-  const r = await runChecks(ENV(kv), { fetchImpl: failing.impl });
-  assert.match(r.summary.errors[0], /Mine: Resend returned HTTP 429/);
+  const kv = fakeKv({ portfolios: [PORTFOLIOS[0]], access: ACCESS });
+  const navs = { 111: [93, 100], 222: [100] };
+  const r = await runChecks(ENV(kv), { fetchImpl: fakeNav(navs).impl, mailer: fakeMailer({ fails: true }).mailer });
+  assert.match(r.summary.errors[0], /Mine: mail server rejected login: 535/);
   assert.deepEqual(JSON.parse(kv.store.get('state')), { p1: {} });
 
-  const dry = fakeFetch({ 111: [93, 100], 222: [100] });
   const writes = kv.writes;
-  const d = await runChecks(ENV(kv), { fetchImpl: dry.impl, dryRun: true });
+  const dry = fakeMailer();
+  const d = await runChecks(ENV(kv), { fetchImpl: fakeNav(navs).impl, mailer: dry.mailer, dryRun: true });
   assert.equal(kv.writes, writes);
-  assert.equal(dry.calls.emails.length, 0);
+  assert.equal(dry.sent.length, 0);
   assert.equal(d.results[0].alerts.length, 1); // still pending
 
-  const retry = fakeFetch({ 111: [93, 100], 222: [100] });
-  await runChecks(ENV(kv), { fetchImpl: retry.impl });
-  assert.equal(retry.calls.emails.length, 1);
+  const retry = fakeMailer();
+  await runChecks(ENV(kv), { fetchImpl: fakeNav(navs).impl, mailer: retry.mailer });
+  assert.equal(retry.sent.length, 1);
 });
 
-test('at send time mail goes only to approved addresses; with none approved nothing is sent', async () => {
-  const kv = fakeKv({ portfolios: [PORTFOLIOS[1]] }); // a@x.com, b@x.com
-  const { impl, calls } = fakeFetch({ 111: [93, 100] });
-  await runChecks({ ...ENV(kv), ALLOWED_EMAILS: 'a@x.com' }, { fetchImpl: impl }); // b@ was removed from the list after saving
-  assert.deepEqual(calls.emails.map((e) => e.to), [['a@x.com']]);
-
-  const kv2 = fakeKv({ portfolios: [PORTFOLIOS[1]] });
-  const none = fakeFetch({ 111: [93, 100] });
-  const r = await runChecks({ ...ENV(kv2), ALLOWED_EMAILS: undefined }, { fetchImpl: none.impl });
-  assert.equal(none.calls.emails.length, 0);
-  assert.match(r.summary.errors[0], /none of its addresses are in ALLOWED_EMAILS/);
-  assert.deepEqual(JSON.parse(kv2.store.get('state')), { p2: {} }); // still pending
+test("a per-owner run touches only that owner's portfolios and keeps others' state", async () => {
+  const kv = fakeKv({ portfolios: PORTFOLIOS, access: ACCESS, state: { p2: { 111: { alertedStepPct: 5 } } } });
+  const { mailer, sent } = fakeMailer();
+  const r = await runChecks(ENV(kv), { owner: 'me@x.com', fetchImpl: fakeNav({ 111: [93, 100], 222: [100] }).impl, fetchOpts: FAST, mailer });
+  assert.deepEqual(r.results.map((x) => x.id), ['p1', 'p3']);
+  assert.deepEqual(sent.map((m) => m.to), [['me@x.com']]);
+  const state = JSON.parse(kv.store.get('state'));
+  assert.deepEqual(state.p2, { 111: { alertedStepPct: 5 } });
+  assert.equal(state.p1['111'].alertedStepPct, 5);
+  assert.equal(kv.store.get('lastRun'), undefined); // per-user runs don't overwrite the scheduled summary
 });
 
-test('without RESEND_API_KEY nothing is sent and alerts stay pending', async () => {
-  const kv = fakeKv({ portfolios: [PORTFOLIOS[0]] });
-  const { impl, calls } = fakeFetch({ 111: [93, 100], 222: [100] });
-  const env = { ...ENV(kv), RESEND_API_KEY: undefined };
-  const r = await runChecks(env, { fetchImpl: impl });
-  assert.equal(calls.emails.length, 0);
-  assert.match(r.summary.errors[0], /RESEND_API_KEY not set/);
+test('without a mailer nothing is sent and alerts stay pending', async () => {
+  const kv = fakeKv({ portfolios: [PORTFOLIOS[0]], access: ACCESS });
+  const r = await runChecks(ENV(kv), { fetchImpl: fakeNav({ 111: [93, 100], 222: [100] }).impl });
+  assert.match(r.summary.errors[0], /no mailer configured/);
   assert.deepEqual(JSON.parse(kv.store.get('state')), { p1: {} });
 });
+
