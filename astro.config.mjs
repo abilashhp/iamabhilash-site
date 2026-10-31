@@ -7,9 +7,9 @@ export default defineConfig({
   // The apex domain 301s here, so this is the canonical origin.
   site: 'https://www.iamabhilash.in',
   integrations: [
-    // The invite pages are personal and carry noindex; keep them out of the sitemap too.
+    // The invite pages and MF alerts are private and carry noindex; keep them out of the sitemap too.
     sitemap({
-      filter: (page) => !/\/invite(-card(-kn)?)?\/?$/.test(new URL(page).pathname),
+      filter: (page) => !/\/(invite(-card(-kn)?)?|tools\/mf-alerts)\/?$/.test(new URL(page).pathname),
       // Static (non-Astro) pages under public/ that the integration can't discover.
       customPages: ['https://www.iamabhilash.in/tools/edge-log-analyzer/'],
     }),

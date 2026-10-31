@@ -1,0 +1,311 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+
+<Layout title="MF Drawdown Alerts — iamabhilash.in" description="Private: mutual fund drawdown alerts." noindex>
+
+<nav>
+    <a href="/tools" class="nav-back">← Tools</a>
+    <button id="lockBtn" class="nav-btn" hidden>Lock</button>
+</nav>
+
+<div class="page">
+    <header class="page-hdr">
+        <h1>MF Drawdown Alerts</h1>
+        <p class="sub">Emails you when a fund's NAV falls a set step (5% by default) below its 52-week high, and again at each further step. Checked daily at 09:00 IST with AMFI NAVs from mfapi.in.</p>
+    </header>
+
+    <section id="unlock" class="card">
+        <div class="label">Passphrase</div>
+        <p class="hint">This page is private. The passphrase is kept in this browser until you press Lock.</p>
+        <form id="unlockForm" class="row">
+            <input id="passInput" type="password" autocomplete="current-password" placeholder="Passphrase" required>
+            <button class="btn primary" type="submit">Unlock</button>
+        </form>
+        <p id="unlockMsg" class="msg"></p>
+    </section>
+
+    <div id="app" hidden>
+        <div class="toolbar">
+            <button id="newBtn" class="btn primary">+ New portfolio</button>
+            <button id="refreshBtn" class="btn">Refresh NAVs</button>
+            <button id="runBtn" class="btn">Check now &amp; send alerts</button>
+        </div>
+        <p id="appMsg" class="msg"></p>
+
+        <section id="editor" class="card" hidden>
+            <div class="label" id="editorTitle">New portfolio</div>
+            <div class="grid">
+                <label>Name<input id="pName" type="text" maxlength="80" placeholder="e.g. My holdings"></label>
+                <label>Alert step (%)<input id="pStep" type="number" min="1" max="50" step="0.5" value="5"></label>
+            </div>
+            <label class="full">Email addresses (comma-separated)<input id="pEmails" type="text" placeholder="you@example.com"></label>
+            <div class="label" style="margin-top:14px;">Funds</div>
+            <p class="hint">Search by name and pick the exact plan (Direct/Regular, Growth/IDCW). Units are optional — they only add the holding value to emails.</p>
+            <div class="search">
+                <input id="fundSearch" type="text" placeholder="Search funds, e.g. parag parikh flexi direct growth" autocomplete="off">
+                <ul id="searchResults" hidden></ul>
+            </div>
+            <table class="tbl" id="fundTable">
+                <thead><tr><th>Fund</th><th class="num">Units</th><th></th></tr></thead>
+                <tbody></tbody>
+            </table>
+            <div class="row end">
+                <button id="cancelBtn" class="btn">Cancel</button>
+                <button id="saveBtn" class="btn primary">Save portfolio</button>
+            </div>
+            <p id="editorMsg" class="msg"></p>
+        </section>
+
+        <div id="portfolios"></div>
+        <p id="lastRun" class="foot"></p>
+    </div>
+</div>
+
+<script is:inline>
+(() => {
+    const PASS_KEY = 'mfAlerts.passphrase';
+    const $ = (id) => document.getElementById(id);
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fmtPct = (n) => (n > 0 ? '-' : '') + Math.abs(n).toFixed(2) + '%';
+    const fmtInr = (n) => '₹' + Math.round(n).toLocaleString('en-IN');
+    let portfolios = [], results = [], editing = null, draftFunds = [];
+
+    function setMsg(el, text, kind) { el.textContent = text || ''; el.className = 'msg' + (kind ? ' ' + kind : ''); }
+
+    async function api(path, opts = {}) {
+        const res = await fetch('/api/mf/' + path, {
+            ...opts,
+            headers: { 'content-type': 'application/json', 'x-mf-passphrase': localStorage.getItem(PASS_KEY) || '', ...(opts.headers || {}) },
+        });
+        let body = {};
+        try { body = await res.json(); } catch { /* non-JSON error page */ }
+        if (res.status === 401) { lock('Wrong passphrase.'); throw new Error('Wrong passphrase.'); }
+        if (!res.ok) throw new Error(body.error || body.skipped || `HTTP ${res.status}`);
+        return body;
+    }
+
+    function lock(message) {
+        localStorage.removeItem(PASS_KEY);
+        $('app').hidden = true; $('lockBtn').hidden = true; $('unlock').hidden = false;
+        setMsg($('unlockMsg'), message || '', message ? 'err' : '');
+    }
+    async function unlock() {
+        $('unlock').hidden = true; $('app').hidden = false; $('lockBtn').hidden = false;
+        await load();
+    }
+
+    async function load() {
+        setMsg($('appMsg'), 'Loading NAVs…');
+        try {
+            const status = await api('status');
+            results = status.results;
+            const list = await api('portfolios');
+            portfolios = list.portfolios;
+            render(status.lastRun);
+            setMsg($('appMsg'), '');
+        } catch (err) { if ($('app').hidden === false) setMsg($('appMsg'), err.message, 'err'); }
+    }
+
+    function statusCell(r, step) {
+        if (r.error) return `<span class="pill bad">${esc(r.error)}</span>`;
+        // alertedStepPct is what has actually been emailed (from the stored state).
+        if (r.stepPct > r.alertedStepPct) return `<span class="pill bad">past -${esc(r.stepPct)}%</span><div class="small">${esc(r.alertedStepPct ? `emailed at -${r.alertedStepPct}%; ` : '')}-${esc(r.stepPct)}% email goes out at the next check</div>`;
+        if (r.stepPct > 0) return `<span class="pill bad">past -${esc(r.stepPct)}%</span><div class="small">emailed at -${esc(r.alertedStepPct)}% · next at -${esc(r.alertedStepPct + step)}%</div>`;
+        return `<span class="pill ok">OK</span><div class="small">alert at -${esc(step)}%</div>`;
+    }
+
+    function render(lastRun) {
+        const byId = new Map(results.map((r) => [r.id, r]));
+        $('portfolios').innerHTML = portfolios.map((p) => `
+            <section class="card">
+                <div class="row between">
+                    <div>
+                        <div class="pname">${esc(p.name)}</div>
+                        <div class="small">${esc(p.emails.join(', '))} · step ${esc(p.thresholdPct)}%</div>
+                    </div>
+                    <div class="row">
+                        <button class="btn sm" data-edit="${esc(p.id)}">Edit</button>
+                        <button class="btn sm" data-test="${esc(p.id)}">Test email</button>
+                        <button class="btn sm danger" data-del="${esc(p.id)}">Delete</button>
+                    </div>
+                </div>
+                <div class="scroll"><table class="tbl" data-rows="${esc(p.id)}">
+                    <thead><tr><th>Fund</th><th class="num">Latest NAV</th><th class="num">52-week high</th><th class="num">Down</th><th>Status</th><th class="num">Value</th></tr></thead>
+                    <tbody></tbody>
+                </table></div>
+            </section>`).join('') || '<p class="hint">No portfolios yet — add one with “+ New portfolio”.</p>';
+        for (const p of portfolios) {
+            const rows = (byId.get(p.id) || { rows: [] }).rows;
+            document.querySelector(`[data-rows="${CSS.escape(p.id)}"] tbody`).innerHTML = rows.map((r) => `
+                <tr>
+                    <td>${esc(r.schemeName)}<div class="small">${esc(r.schemeCode)}</div></td>
+                    <td class="num">${esc(r.error ? '—' : r.latestNav)}<div class="small">${esc(r.latestDate || '')}</div></td>
+                    <td class="num">${esc(r.error ? '—' : r.peakNav)}<div class="small">${esc(r.peakDate || '')}</div></td>
+                    <td class="num ${esc(r.stepPct > 0 ? 'down' : '')}">${esc(r.error ? '—' : fmtPct(r.drawdownPct))}</td>
+                    <td>${statusCell(r, p.thresholdPct)}</td>
+                    <td class="num">${esc(r.value ? fmtInr(r.value) : '—')}</td>
+                </tr>`).join('');
+        }
+        $('lastRun').textContent = lastRun
+            ? `Last check (${lastRun.trigger}): ${new Date(lastRun.at).toLocaleString()} · ${lastRun.alertsSent} alert(s) emailed${lastRun.errors.length ? ' · problems: ' + lastRun.errors.join('; ') : ''}`
+            : 'No scheduled check has run yet.';
+    }
+
+    function openEditor(p) {
+        editing = p ? p.id : null;
+        draftFunds = p ? p.funds.map((f) => ({ ...f })) : [];
+        $('editorTitle').textContent = p ? `Edit “${p.name}”` : 'New portfolio';
+        $('pName').value = p ? p.name : '';
+        $('pEmails').value = p ? p.emails.join(', ') : '';
+        $('pStep').value = p ? p.thresholdPct : 5;
+        $('fundSearch').value = ''; $('searchResults').hidden = true;
+        setMsg($('editorMsg'), '');
+        renderDraft();
+        $('editor').hidden = false;
+        $('pName').focus();
+    }
+    function renderDraft() {
+        $('fundTable').querySelector('tbody').innerHTML = draftFunds.map((f, i) => `
+            <tr>
+                <td>${esc(f.schemeName)}<div class="small">${esc(f.schemeCode)}</div></td>
+                <td class="num"><input class="units" data-units="${i}" type="number" min="0" step="any" value="${esc(f.units ?? '')}" placeholder="optional"></td>
+                <td><button class="btn sm danger" data-remove="${i}">Remove</button></td>
+            </tr>`).join('') || '<tr><td colspan="3" class="small">No funds yet — search above.</td></tr>';
+    }
+
+    let searchTimer = null, searchSeq = 0;
+    $('fundSearch').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        const q = $('fundSearch').value.trim();
+        if (q.length < 3) { $('searchResults').hidden = true; return; }
+        searchTimer = setTimeout(async () => {
+            const seq = ++searchSeq;
+            try {
+                const res = await fetch('https://api.mfapi.in/mf/search?q=' + encodeURIComponent(q));
+                const list = (await res.json()).slice(0, 25);
+                if (seq !== searchSeq) return;
+                $('searchResults').innerHTML = list.map((s) => `<li data-code="${esc(s.schemeCode)}" data-name="${esc(s.schemeName)}">${esc(s.schemeName)} <span class="small">${esc(s.schemeCode)}</span></li>`).join('') || '<li class="small">No matches — try fewer words, or the fund\'s current name (funds get renamed, e.g. Axis Bluechip → Axis Large Cap).</li>';
+                $('searchResults').hidden = false;
+            } catch (err) { setMsg($('editorMsg'), 'Fund search failed: ' + err.message, 'err'); }
+        }, 300);
+    });
+    $('searchResults').addEventListener('click', (e) => {
+        const li = e.target.closest('[data-code]');
+        if (!li) return;
+        if (!draftFunds.some((f) => String(f.schemeCode) === li.dataset.code)) draftFunds.push({ schemeCode: li.dataset.code, schemeName: li.dataset.name, units: null });
+        $('searchResults').hidden = true; $('fundSearch').value = '';
+        renderDraft();
+    });
+    $('fundTable').addEventListener('input', (e) => {
+        const i = e.target.dataset.units;
+        if (i !== undefined) draftFunds[+i].units = e.target.value === '' ? null : Number(e.target.value);
+    });
+    $('fundTable').addEventListener('click', (e) => {
+        const i = e.target.dataset.remove;
+        if (i !== undefined) { draftFunds.splice(+i, 1); renderDraft(); }
+    });
+
+    $('saveBtn').addEventListener('click', async () => {
+        const body = { id: editing || undefined, name: $('pName').value, emails: $('pEmails').value, thresholdPct: $('pStep').value, funds: draftFunds };
+        setMsg($('editorMsg'), 'Saving…');
+        try {
+            await api('portfolios', { method: 'POST', body: JSON.stringify(body) });
+            $('editor').hidden = true;
+            await load();
+            setMsg($('appMsg'), 'Saved.', 'ok');
+        } catch (err) { setMsg($('editorMsg'), err.message, 'err'); }
+    });
+    $('cancelBtn').addEventListener('click', () => { $('editor').hidden = true; });
+    $('newBtn').addEventListener('click', () => openEditor(null));
+    $('refreshBtn').addEventListener('click', load);
+    $('runBtn').addEventListener('click', async () => {
+        if (!confirm('Run the check now? Funds past a new step will be emailed, exactly as the daily check would.')) return;
+        setMsg($('appMsg'), 'Checking…');
+        try {
+            const { summary } = await api('run', { method: 'POST' });
+            await load();
+            setMsg($('appMsg'), `Done: ${summary.alertsSent} alert(s) emailed${summary.errors.length ? ' · ' + summary.errors.join('; ') : ''}.`, summary.errors.length ? 'err' : 'ok');
+        } catch (err) { setMsg($('appMsg'), err.message, 'err'); }
+    });
+    $('portfolios').addEventListener('click', async (e) => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        const p = portfolios.find((x) => x.id === (b.dataset.edit || b.dataset.test || b.dataset.del));
+        if (!p) return;
+        if (b.dataset.edit) { openEditor(p); $('editor').scrollIntoView({ behavior: 'smooth' }); }
+        if (b.dataset.test) {
+            setMsg($('appMsg'), 'Sending test email…');
+            try { await api('test-email/' + encodeURIComponent(p.id), { method: 'POST' }); setMsg($('appMsg'), `Test email sent to ${p.emails.join(', ')}.`, 'ok'); }
+            catch (err) { setMsg($('appMsg'), err.message, 'err'); }
+        }
+        if (b.dataset.del && confirm(`Delete “${p.name}” and its alert history?`)) {
+            try { await api('portfolios/' + encodeURIComponent(p.id), { method: 'DELETE' }); await load(); }
+            catch (err) { setMsg($('appMsg'), err.message, 'err'); }
+        }
+    });
+
+    $('unlockForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        localStorage.setItem(PASS_KEY, $('passInput').value);
+        $('passInput').value = '';
+        unlock();
+    });
+    $('lockBtn').addEventListener('click', () => lock());
+    if (localStorage.getItem(PASS_KEY)) unlock();
+})();
+</script>
+
+</Layout>
+
+<!-- Global so it also styles the rows and buttons the script builds; it only loads on this page. -->
+<style is:global>
+nav { display: flex; align-items: center; justify-content: space-between; padding: 0 40px; height: 52px; background: rgba(9,9,11,0.94); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.06); position: sticky; top: 0; z-index: 50; }
+.nav-back { font-size: 0.85rem; color: #a1a1aa; }
+.nav-back:hover { color: #e4e4e7; text-decoration: none; }
+.nav-btn { background: none; border: 1px solid #334155; color: #a1a1aa; border-radius: 6px; padding: 4px 12px; font: inherit; font-size: 0.8rem; cursor: pointer; }
+.page { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
+.page-hdr { text-align: center; margin-bottom: 28px; }
+h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.sub { color: #a1a1aa; font-size: 0.85rem; max-width: 640px; margin: 0 auto; line-height: 1.6; }
+.card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 16px; }
+.label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 4px; }
+.hint { font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px; line-height: 1.5; }
+.small { font-size: 0.72rem; color: #94a3b8; }
+.foot { font-size: 0.78rem; color: #94a3b8; margin-top: 8px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row.between { justify-content: space-between; margin-bottom: 12px; }
+.row.end { justify-content: flex-end; margin-top: 14px; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.grid { display: grid; grid-template-columns: 1fr 160px; gap: 12px; margin-top: 8px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: #cbd5e1; }
+label.full { margin-top: 12px; }
+input { background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; padding: 9px 11px; font: inherit; font-size: 0.875rem; }
+input:focus { outline: none; border-color: #60a5fa; }
+#unlockForm input { flex: 1; min-width: 200px; }
+.btn { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; border-radius: 8px; padding: 9px 14px; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+.btn:hover { border-color: #60a5fa; }
+.btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.btn.sm { padding: 5px 10px; font-size: 0.75rem; }
+.btn.danger { color: #fca5a5; }
+.msg { font-size: 0.82rem; color: #94a3b8; min-height: 1.2em; margin: 6px 0; }
+.msg.err { color: #fca5a5; }
+.msg.ok { color: #86efac; }
+.pname { font-size: 1rem; font-weight: 700; color: #f1f5f9; }
+.scroll { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.tbl th { text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; padding: 6px 8px; border-bottom: 1px solid #334155; }
+.tbl td { padding: 8px; border-bottom: 1px solid rgba(51,65,85,0.6); color: #e2e8f0; vertical-align: top; }
+.tbl .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tbl td.down { color: #fca5a5; font-weight: 700; }
+.pill { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.pill.ok { background: rgba(34,197,94,0.15); color: #86efac; }
+.pill.bad { background: rgba(239,68,68,0.15); color: #fca5a5; }
+.units { width: 120px; text-align: right; }
+.search { position: relative; margin-bottom: 10px; }
+.search input { width: 100%; }
+#searchResults { list-style: none; position: absolute; left: 0; right: 0; top: 100%; z-index: 10; background: #0f172a; border: 1px solid #334155; border-radius: 8px; max-height: 280px; overflow-y: auto; margin-top: 4px; }
+#searchResults li { padding: 8px 11px; font-size: 0.82rem; cursor: pointer; color: #e2e8f0; border-bottom: 1px solid rgba(51,65,85,0.5); }
+#searchResults li:hover { background: #1e293b; }
+@media (max-width: 640px) { nav { padding: 0 20px; } .grid { grid-template-columns: 1fr; } }
+</style>

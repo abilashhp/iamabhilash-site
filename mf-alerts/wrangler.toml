@@ -1,0 +1,23 @@
+# Daily mutual fund drawdown check. Deploy from this directory:
+#   npx wrangler deploy
+# Secrets (once): npx wrangler secret put RESEND_API_KEY
+name = "mf-alerts"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+# Not reachable over HTTP: it only runs on the schedule below.
+workers_dev = false
+
+[triggers]
+# 03:30 UTC = 09:00 IST, after AMFI has published the previous day's NAVs.
+crons = ["30 3 * * *"]
+
+[[kv_namespaces]]
+binding = "MF_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+MAIL_FROM = "MF Alerts <alerts@iamabhilash.in>"
+SITE_URL = "https://www.iamabhilash.in"
+
+[observability]
+enabled = true

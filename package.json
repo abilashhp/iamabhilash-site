@@ -10,11 +10,14 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "node --test 'tests/edge-log-analyzer/*.test.mjs'",
+    "test": "node --test 'tests/edge-log-analyzer/*.test.mjs' 'tests/mf-alerts/*.test.mjs'",
     "build:standalone-ela": "node scripts/build-standalone-ela.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
     "astro": "^6.4.4"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.0"
   }
 }

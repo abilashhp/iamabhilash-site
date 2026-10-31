@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # private GFA dictionaries (Akamai confidential) — never commit
 gfa-dictionary*.json
+
+# wrangler local dev state
+.wrangler/
