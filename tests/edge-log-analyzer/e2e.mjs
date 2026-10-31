@@ -2,20 +2,30 @@
 // protocol (Node's built-in WebSocket, no dependencies). Needs network access
 // for the Chart.js CDN, which also verifies the script's SRI hash.
 // Run: node tests/edge-log-analyzer/e2e.mjs [screenshot.png]
+// ELA_STANDALONE=1 runs the same checks against the generated standalone build
+// (no GFA section) instead of the site copy.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { loadTool, INDEX_HTML } from './load.mjs';
 import { makeTools, realisticDataset, realisticGfaDataset, GFA_TEST_DICT } from './fixtures.mjs';
+import { toStandalone } from '../../scripts/build-standalone-ela.mjs';
 
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`); };
 
-const toolDir = dirname(INDEX_HTML);
+const STANDALONE = process.env.ELA_STANDALONE === '1';
+let toolDir = dirname(INDEX_HTML);
+if (STANDALONE) {
+  toolDir = mkdtempSync(join(tmpdir(), 'ela-standalone-'));
+  writeFileSync(join(toolDir, 'index.html'), toStandalone(readFileSync(INDEX_HTML, 'utf8')));
+  copyFileSync(join(dirname(INDEX_HTML), 'log-line-fields.pdf'), join(toolDir, 'log-line-fields.pdf'));
+  console.log(`testing the standalone build in ${toolDir}`);
+}
 const server = createServer((req, res) => {
   const file = req.url === '/' ? 'index.html' : req.url.split('?')[0].slice(1);
   let body;
@@ -149,77 +159,82 @@ try {
   await sleep(600);
   check('reset restores the full range', (await evaluate(`document.getElementById('kpiTotal').textContent`)) === String(await evaluate('fullRLines.length')));
 
-  // --- GFA: column found, drill-downs reproduce counts, trace, range scoping, dictionary ---
-  const gfaLines = realisticGfaDataset(T, { withS: true });
-  gfaLines.push(r({ ts: 1700005000, gfa: 'nsa=//aa/S/%3Cimg%20src%3Dx%20onerror%3Dwindow.__xss%3D5%3E/<b>1</b>' }));
-  await evaluate(`analyzeText(${JSON.stringify(gfaLines.join('\n'))}, 'e2e gfa')`);
-  await sleep(900);
-  const gfaTop = await evaluate(`({ badge: document.getElementById('gfaBadge').textContent, summary: document.getElementById('gfaSummary').textContent, insightsHidden: document.getElementById('gfaInsightsBox').hidden, n: gfaResult.withGfa })`);
-  check('GFA column found on r and S records, structure shown without a dictionary', gfaTop.badge === `${gfaTop.n} request(s)` && /column \$72 on r lines, \$61 on S records/.test(gfaTop.summary) && gfaTop.insightsHidden, JSON.stringify(gfaTop));
+  if (STANDALONE) {
+    check('standalone build has no GFA section', (await evaluate(`!document.getElementById('gfaCard') && typeof analyzeGfa === 'undefined'`)) === true);
+  } else {
+    // --- GFA: column found, drill-downs reproduce counts, trace, range scoping, dictionary ---
+    const gfaLines = realisticGfaDataset(T, { withS: true });
+    gfaLines.push(r({ ts: 1700005000, gfa: 'nsa=//aa/S/%3Cimg%20src%3Dx%20onerror%3Dwindow.__xss%3D5%3E/<b>1</b>' }));
+    await evaluate(`analyzeText(${JSON.stringify(gfaLines.join('\n'))}, 'e2e gfa')`);
+    await sleep(900);
+    const gfaTop = await evaluate(`({ badge: document.getElementById('gfaBadge').textContent, summary: document.getElementById('gfaSummary').textContent, insightsHidden: document.getElementById('gfaInsightsBox').hidden, n: gfaResult.withGfa })`);
+    check('GFA column found on r and S records, structure shown without a dictionary', gfaTop.badge === `${gfaTop.n} request(s)` && /column \$72 on r lines, \$61 on S records/.test(gfaTop.summary) && gfaTop.insightsHidden, JSON.stringify(gfaTop));
 
-  await evaluate(`gfaDict = validateGfaDictionary(${JSON.stringify(GFA_TEST_DICT)}); refreshGfa();`);
-  await sleep(300);
-  const provN = await evaluate(`gfaResult.providers[0].n`);
-  await clickSelector('#gfaProviderTable [data-gfa-drill]');
-  await sleep(500);
-  const provStatus = await evaluate(`({ status: document.getElementById('queryStatus').textContent, query: document.getElementById('queryInput').value })`);
-  check('GFA provider "lines" reproduces its request count across r and S', provStatus.status.includes(`: ${provN} output line(s)`) && provStatus.query.includes('$2=="S"'), JSON.stringify(provStatus));
+    await evaluate(`gfaDict = validateGfaDictionary(${JSON.stringify(GFA_TEST_DICT)}); refreshGfa();`);
+    await sleep(300);
+    const provN = await evaluate(`gfaResult.providers[0].n`);
+    await clickSelector('#gfaProviderTable [data-gfa-drill]');
+    await sleep(500);
+    const provStatus = await evaluate(`({ status: document.getElementById('queryStatus').textContent, query: document.getElementById('queryInput').value })`);
+    check('GFA provider "lines" reproduces its request count across r and S', provStatus.status.includes(`: ${provN} output line(s)`) && provStatus.query.includes('$2=="S"'), JSON.stringify(provStatus));
 
-  await clickSelector('[data-gfa-select="nsa/aa"]');
-  await sleep(400);
-  const valExpected = await evaluate(`gfaResult.providers.find((p) => p.key === 'nsa/aa').fields[1].values[0].count`);
-  await clickSelector('#gfaDetailFields tbody[data-gfa-field="1"] [data-gfa-drill]');
-  await sleep(500);
-  const valStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
-  check('GFA field value "lines" reproduces its count', valStatus.includes(`: ${valExpected} output line(s)`), `${valExpected}: ${valStatus}`);
+    await clickSelector('[data-gfa-select="nsa/aa"]');
+    await sleep(400);
+    const valExpected = await evaluate(`gfaResult.providers.find((p) => p.key === 'nsa/aa').fields[1].values[0].count`);
+    await clickSelector('#gfaDetailFields tbody[data-gfa-field="1"] [data-gfa-drill]');
+    await sleep(500);
+    const valStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
+    check('GFA field value "lines" reproduces its count', valStatus.includes(`: ${valExpected} output line(s)`), `${valExpected}: ${valStatus}`);
 
-  const insExpected = await evaluate(`gfaResult.insights[0].count`);
-  await clickSelector('#gfaInsights [data-gfa-drill]');
-  await sleep(500);
-  const insStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
-  check('GFA insight "lines" reproduces its count', insStatus.includes(`: ${insExpected} output line(s)`), `${insExpected}: ${insStatus}`);
+    const insExpected = await evaluate(`gfaResult.insights[0].count`);
+    await clickSelector('#gfaInsights [data-gfa-drill]');
+    await sleep(500);
+    const insStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
+    check('GFA insight "lines" reproduces its count', insStatus.includes(`: ${insExpected} output line(s)`), `${insExpected}: ${insStatus}`);
 
-  await sleep(800); // let the drill-down's smooth scroll settle; nsa/aa is still open
-  await clickSelector('#gfaDetailFields tbody[data-gfa-field="0"] [data-gfa-trace]');
-  await sleep(400);
-  const trace = await evaluate(`({ status: document.getElementById('gfaTraceStatus').textContent, rows: document.querySelectorAll('#gfaTraceTable tbody tr').length, v: document.getElementById('gfaTraceInput').value })`);
-  const traceN = parseInt(trace.status, 10);
-  check('trace from a session value lists its requests', traceN > 0 && trace.rows === Math.min(traceN, 200) && trace.v.length === 32, JSON.stringify(trace));
-  await clickSelector('[data-gfa-trace-drill]');
-  await sleep(500);
-  const traceStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
-  check('trace "lines" reproduces the trace count', traceStatus.includes(`: ${traceN} output line(s)`), traceStatus);
+    await sleep(800); // let the drill-down's smooth scroll settle; nsa/aa is still open
+    await clickSelector('#gfaDetailFields tbody[data-gfa-field="0"] [data-gfa-trace]');
+    await sleep(400);
+    const trace = await evaluate(`({ status: document.getElementById('gfaTraceStatus').textContent, rows: document.querySelectorAll('#gfaTraceTable tbody tr').length, v: document.getElementById('gfaTraceInput').value })`);
+    const traceN = parseInt(trace.status, 10);
+    check('trace from a session value lists its requests', traceN > 0 && trace.rows === Math.min(traceN, 200) && trace.v.length === 32, JSON.stringify(trace));
+    await clickSelector('[data-gfa-trace-drill]');
+    await sleep(500);
+    const traceStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
+    check('trace "lines" reproduces the trace count', traceStatus.includes(`: ${traceN} output line(s)`), traceStatus);
 
-  const xssGfa = await evaluate(`(() => { gfaSelected = 'nsa/aa'; renderGfa(); runGfaTrace('S'); const card = document.getElementById('gfaCard').textContent; return { flag: window.__xss ?? null, imgs: document.querySelectorAll('#gfaCard img').length, bold: document.querySelectorAll('#gfaCard b').length, text: card.includes('<img src=x onerror=window.__xss=5>') && card.includes('<b>1<') }; })()`);
-  check('hostile GFA values render as inert text', xssGfa.flag === null && xssGfa.imgs === 0 && xssGfa.bold === 0 && xssGfa.text, JSON.stringify(xssGfa));
+    const xssGfa = await evaluate(`(() => { gfaSelected = 'nsa/aa'; renderGfa(); runGfaTrace('S'); const card = document.getElementById('gfaCard').textContent; return { flag: window.__xss ?? null, imgs: document.querySelectorAll('#gfaCard img').length, bold: document.querySelectorAll('#gfaCard b').length, text: card.includes('<img src=x onerror=window.__xss=5>') && card.includes('<b>1<') }; })()`);
+    check('hostile GFA values render as inert text', xssGfa.flag === null && xssGfa.imgs === 0 && xssGfa.bold === 0 && xssGfa.text, JSON.stringify(xssGfa));
 
-  const fullGfa = await evaluate('gfaResult.withGfa');
-  await evaluate(`runGfaTrace(${JSON.stringify(trace.v)})`);
-  const gfaBin = await evaluate(`lastAnalyzeResult.timeline.counts.findIndex((c) => c > 20)`);
-  await clickChartElement('rpsChart', gfaBin);
-  await sleep(900);
-  const zoomed = await evaluate(`({ n: gfaResult.withGfa, inScope: currentScopeLines.rLines.filter((f) => f.gfa).length, trace: parseInt(document.getElementById('gfaTraceStatus').textContent, 10), traceScope: gfaTrace(currentScopeLines.rLines, ${JSON.stringify(trace.v)}).length })`);
-  check('zooming re-scopes the GFA section and re-runs the open trace', zoomed.n === zoomed.inScope && zoomed.n < fullGfa && zoomed.trace === zoomed.traceScope, JSON.stringify({ ...zoomed, fullGfa }));
-  await clickSelector('#resetRangeBtn');
-  await sleep(500);
+    const fullGfa = await evaluate('gfaResult.withGfa');
+    await evaluate(`runGfaTrace(${JSON.stringify(trace.v)})`);
+    const gfaBin = await evaluate(`lastAnalyzeResult.timeline.counts.findIndex((c) => c > 20)`);
+    await clickChartElement('rpsChart', gfaBin);
+    await sleep(900);
+    const zoomed = await evaluate(`({ n: gfaResult.withGfa, inScope: currentScopeLines.rLines.filter((f) => f.gfa).length, trace: parseInt(document.getElementById('gfaTraceStatus').textContent, 10), traceScope: gfaTrace(currentScopeLines.rLines, ${JSON.stringify(trace.v)}).length })`);
+    check('zooming re-scopes the GFA section and re-runs the open trace', zoomed.n === zoomed.inScope && zoomed.n < fullGfa && zoomed.trace === zoomed.traceScope, JSON.stringify({ ...zoomed, fullGfa }));
+    await clickSelector('#resetRangeBtn');
+    await sleep(500);
 
-  await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'g:Alpha and beta'; s.dispatchEvent(new Event('change')); })()`);
-  await sleep(300);
-  const view = await evaluate(`({ summary: document.getElementById('gfaSummary').textContent, rows: [...document.querySelectorAll('#gfaProviderTable tbody td.key')].map((td) => td.textContent), n: gfaResult.withGfa, all: gfaResult.gfaTotal })`);
-  await clickSelector('#gfaSummary [data-gfa-drill]');
-  await sleep(500);
-  const viewStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
-  check('a dictionary group view shows only its providers and its "lines" reproduce its count', view.summary.startsWith('View "Alpha and beta"') && view.rows.sort().join() === 'nsa/aa,nsa/bb' && view.n < view.all && viewStatus.includes(`: ${view.n} output line(s)`), JSON.stringify({ ...view, viewStatus }));
-  await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'ns:nsb'; s.dispatchEvent(new Event('change')); })()`);
-  await sleep(300);
-  const nsRows = await evaluate(`[...document.querySelectorAll('#gfaProviderTable tbody td.key')].map((td) => td.textContent).join()`);
-  check('a namespace view needs no dictionary group', nsRows === 'nsb/cc', nsRows);
-  await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'g:Gamma only'; s.dispatchEvent(new Event('change')); })()`);
+    await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'g:Alpha and beta'; s.dispatchEvent(new Event('change')); })()`);
+    await sleep(300);
+    const view = await evaluate(`({ summary: document.getElementById('gfaSummary').textContent, rows: [...document.querySelectorAll('#gfaProviderTable tbody td.key')].map((td) => td.textContent), n: gfaResult.withGfa, all: gfaResult.gfaTotal })`);
+    await clickSelector('#gfaSummary [data-gfa-drill]');
+    await sleep(500);
+    const viewStatus = await evaluate(`document.getElementById('queryStatus').textContent`);
+    check('a dictionary group view shows only its providers and its "lines" reproduce its count', view.summary.startsWith('View "Alpha and beta"') && view.rows.sort().join() === 'nsa/aa,nsa/bb' && view.n < view.all && viewStatus.includes(`: ${view.n} output line(s)`), JSON.stringify({ ...view, viewStatus }));
+    await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'ns:nsb'; s.dispatchEvent(new Event('change')); })()`);
+    await sleep(300);
+    const nsRows = await evaluate(`[...document.querySelectorAll('#gfaProviderTable tbody td.key')].map((td) => td.textContent).join()`);
+    check('a namespace view needs no dictionary group', nsRows === 'nsb/cc', nsRows);
+    await evaluate(`(() => { const s = document.getElementById('gfaView'); s.value = 'g:Gamma only'; s.dispatchEvent(new Event('change')); })()`);
 
-  await clickSelector('#gfaDictForgetBtn');
-  await sleep(300);
-  const forgot = await evaluate(`({ hidden: document.getElementById('gfaInsightsBox').hidden, stored: localStorage.getItem('edgeLogAnalyzer.gfaDictionary'), status: document.getElementById('gfaDictStatus').textContent, view: document.getElementById('gfaView').value })`);
-  check('"Forget dictionary" drops insights, the stored copy and its group view', forgot.hidden && forgot.stored === null && /No dictionary loaded/.test(forgot.status) && forgot.view === '', JSON.stringify(forgot));
+    await clickSelector('#gfaDictForgetBtn');
+    await sleep(300);
+    const forgot = await evaluate(`({ hidden: document.getElementById('gfaInsightsBox').hidden, stored: localStorage.getItem('edgeLogAnalyzer.gfaDictionary'), status: document.getElementById('gfaDictStatus').textContent, view: document.getElementById('gfaView').value })`);
+    check('"Forget dictionary" drops insights, the stored copy and its group view', forgot.hidden && forgot.stored === null && /No dictionary loaded/.test(forgot.status) && forgot.view === '', JSON.stringify(forgot));
+
+  }
 
   // --- S records: counted, and drill-downs / quick queries include them ---
   await evaluate(`analyzeText(${JSON.stringify(realisticDataset(T, { withS: true }).join('\n'))}, 'e2e with S')`);

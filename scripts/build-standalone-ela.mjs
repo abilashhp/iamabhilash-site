@@ -13,11 +13,15 @@ import { fileURLToPath } from 'node:url';
 
 const SRC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../public/tools/edge-log-analyzer');
 
-// Blocks wrapped in /* @site-only:begin */ … /* @site-only:end */ (CSS) or
+// Blocks wrapped in /* @site-only:begin */ … /* @site-only:end */ (CSS/JS) or
 // <!-- @site-only:begin --> … <!-- @site-only:end --> (HTML) exist only on the site:
-// the nav bar linking back to /tools. One trailing blank line is dropped with each block.
+// the nav bar linking back to /tools (2 blocks) and the Ghost Fact Annotations
+// (GFA) section (11 blocks: CSS, card, parser column detection, core functions,
+// drill-down routing, render hook, UI). One trailing blank line is dropped with each block.
 const SITE_ONLY = /^[ \t]*(?:\/\*|<!--) @site-only:begin (?:\*\/|-->)\n[\s\S]*?^[ \t]*(?:\/\*|<!--) @site-only:end (?:\*\/|-->)\n(?:[ \t]*\n)?/gm;
-const EXPECTED_SITE_ONLY_BLOCKS = 2;
+const EXPECTED_SITE_ONLY_BLOCKS = 13;
+// Anything GFA left after stripping means a block lost its markers.
+const MUST_NOT_REMAIN = /gfa|ghost fact/i;
 
 const REPLACEMENTS = [
   ['<title>Edge Log Analyzer — Abhilash HP</title>', '<title>Edge Log Analysis Dashboard</title>'],
@@ -32,6 +36,11 @@ export function toStandalone(html) {
   }
   let out = html.replace(SITE_ONLY, '');
   if (out.includes('@site-only')) throw new Error('unbalanced @site-only marker left after stripping');
+  const leftover = MUST_NOT_REMAIN.exec(out);
+  if (leftover) {
+    const line = out.slice(0, leftover.index).split('\n').length;
+    throw new Error(`site-only content left in the standalone build at line ${line}: ${out.split('\n')[line - 1].trim()}`);
+  }
 
   for (const [from, to] of REPLACEMENTS) {
     const count = out.split(from).length - 1;

@@ -183,6 +183,7 @@
   .kpi .mix-note { margin: 6px 0 0; padding: 3px 6px; font-size: 11px; }
   #groupByTable td, #groupByTable th { padding: 6px 8px; }
   #groupByTable td.key { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; word-break: break-all; }
+  /* @site-only:begin */
   .badge.INFO { background: color-mix(in srgb, var(--series-1) 20%, transparent); color: var(--series-1); }
   .pill.sev-critical { background: color-mix(in srgb, var(--critical) 22%, transparent); color: var(--critical); }
   .pill.sev-warn { background: color-mix(in srgb, var(--serious) 22%, transparent); color: var(--serious); }
@@ -193,6 +194,7 @@
   #gfaCard tr.gfa-selected td { background: color-mix(in srgb, var(--series-1) 10%, transparent); }
   .gfa-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px; }
   @media (max-width: 900px) { .gfa-fields { grid-template-columns: 1fr; } }
+  /* @site-only:end */
   details summary { cursor: pointer; font-size: 12px; color: var(--text-secondary); margin-top: 8px; }
   code { font-size: 12px; background: color-mix(in srgb, var(--text-muted) 15%, transparent); padding: 1px 5px; border-radius: 4px; }
 </style>
@@ -481,6 +483,7 @@
     </table>
   </div>
 
+  <!-- @site-only:begin -->
   <div class="card" id="gfaCard">
     <h2>Ghost Fact Annotations (GFA) <span id="gfaBadge" class="badge NODATA">no file loaded</span></h2>
     <p class="hint">
@@ -537,6 +540,7 @@
       </table>
     </div>
   </div>
+  <!-- @site-only:end -->
 
   <div class="card" id="customQueryCard">
     <h2>Custom Query <span id="queryBadge" class="badge" style="background:var(--gridline); color:var(--text-muted);">no file loaded</span></h2>
@@ -1041,6 +1045,7 @@ const MIN_FIELDS_OK = {
   f: (n) => n >= F_MIN_FIELDS && n < R_MIN_FIELDS,
 };
 const STATUS_INDEX = { r: RF.status, S: SF.status, f: FF.status };
+/* @site-only:begin */
 // The GFA column holds no fixed position we can rely on across log layouts,
 // so it is found by content: per record type, the column that most often
 // holds a "namespace=/…" token.
@@ -1049,13 +1054,18 @@ function mostHitColumn(hits) {
   for (const [col, n] of hits) if (best === null || n > hits.get(best)) best = col;
   return best;
 }
+/* @site-only:end */
 // rLines holds every client-facing record (r lines, and S lines re-shaped by
 // sToRView); `lines` keeps the original text so queries see the real columns.
+/* @site-only:begin */
 // Client-facing records that carry GFA get a `gfa` property with the raw
 // token (sToRView drops the column, so it's captured here).
+/* @site-only:end */
 function parseLogText(text) {
   const lines = [], lineTs = [], rLines = [], fLines = [], skippedLines = [];
+  /* @site-only:begin */
   const gfaHits = { r: new Map(), S: new Map() }, gfaCandidates = new Map();
+  /* @site-only:end */
   const seen = new Set();
   const report = { totalLines: 0, r: 0, S: 0, f: 0, duplicates: 0, skipped: { notRF: 0, fieldCount: 0, badTimestamp: 0, misaligned: 0 }, skippedTotal: 0 };
   for (let l of text.split('\n')) {
@@ -1081,6 +1091,7 @@ function parseLogText(text) {
     if (type === 'f') { fLines.push(f); continue; }
     const view = type === 'S' ? sToRView(f) : f;
     rLines.push(view);
+    /* @site-only:begin */
     if (l.indexOf('=/') === -1) continue; // cheap pre-check before scanning columns
     const cands = new Map();
     for (let i = 3; i < f.length; i++) {
@@ -1089,12 +1100,15 @@ function parseLogText(text) {
       gfaHits[type].set(i, (gfaHits[type].get(i) || 0) + 1);
     }
     if (cands.size) gfaCandidates.set(view, cands);
+    /* @site-only:end */
   }
+  /* @site-only:begin */
   report.gfaColumn = { r: mostHitColumn(gfaHits.r), S: mostHitColumn(gfaHits.S) };
   for (const [view, cands] of gfaCandidates) {
     const token = cands.get(report.gfaColumn[view[RF.type]]);
     if (token) view.gfa = token;
   }
+  /* @site-only:end */
   report.skippedTotal = Object.values(report.skipped).reduce((a, b) => a + b, 0);
   return { lines, lineTs, rLines, fLines, report, skippedLines };
 }
@@ -1512,6 +1526,7 @@ function groupBy(rLines, fLines, dimId) {
     };
   }).sort((a, b) => b.n - a.n);
 }
+/* @site-only:begin */
 
 /* ---------- Ghost Fact Annotations (GFA) ----------
    A GFA token is one log column of ";"-separated "namespace=/…" parts. Each
@@ -1748,6 +1763,7 @@ function analyzeGfa(rLines, dict, view = null) {
     viewKeys, viewDrill: viewKeys && viewKeys.length ? [{ any: viewKeys.map(gfaSplitKey) }] : null,
   };
 }
+/* @site-only:end */
 /* @testable:end */
 
 /* ---------- Chart + DOM rendering ---------- */
@@ -2001,11 +2017,15 @@ function drillDown(spec, label) {
     return;
   }
   document.getElementById('advancedQuery').open = true;
-  document.getElementById('queryInput').value = spec.gfa
-    ? buildGfaDrillQuery(spec.gfa, lastParseReport.gfaColumn)
-    : buildDrillQuery(spec, { includeS: datasetHasS() });
+  document.getElementById('queryInput').value = drillQueryFor(spec);
   runCustomQuery(label);
   card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function drillQueryFor(spec) {
+  /* @site-only:begin */
+  if (spec.gfa) return buildGfaDrillQuery(spec.gfa, lastParseReport.gfaColumn);
+  /* @site-only:end */
+  return buildDrillQuery(spec, { includeS: datasetHasS() });
 }
 function zoomToBin(i) {
   const tl = lastAnalyzeResult && lastAnalyzeResult.timeline;
@@ -2175,9 +2195,12 @@ function renderAll(d) {
     .map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="font-variant-numeric:tabular-nums;">${escapeHtml(v)}</td></tr>`).join('');
   document.getElementById('downloadSkippedBtn').style.display = lastSkippedLines.length ? 'inline-flex' : 'none';
   refreshGroupBy();
+  /* @site-only:begin */
   refreshGfa();
+  /* @site-only:end */
 }
 
+/* @site-only:begin */
 /* ---------- Ghost Fact Annotations (GFA) section ---------- */
 // The dictionary is the user's own file. It lives in localStorage only; this
 // page ships no field names or meanings.
@@ -2447,6 +2470,7 @@ document.getElementById('gfaDictForgetBtn').addEventListener('click', () => {
   try { localStorage.removeItem(GFA_DICT_KEY); } catch (e) { /* ignore */ }
   refreshGfa();
 });
+/* @site-only:end */
 
 /* ---------- Mini AWK-subset interpreter + shell-pipe simulator ---------- */
 /* Supports: $N field refs, $0, $NF, NR, NF, numeric/string literals,
