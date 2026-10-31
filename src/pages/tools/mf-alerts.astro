@@ -72,9 +72,9 @@ import Layout from '../../layouts/Layout.astro';
                 <label>Alert step (%)<input id="pStep" type="number" min="1" max="50" step="0.5" value="5"></label>
             </div>
             <div class="label" style="margin-top:14px;">Funds</div>
-            <p class="hint">Search by name and pick the exact plan (Direct/Regular, Growth/IDCW). Units are optional — they only add the holding value to emails.</p>
+            <p class="hint">Search by name and pick the exact plan (Direct/Regular, Growth/IDCW), or type its AMFI scheme code. Funds are sometimes renamed — e.g. ICICI Value Discovery is now “ICICI Prudential Value Fund”. Units are optional — they only add the holding value to emails.</p>
             <div class="search">
-                <input id="fundSearch" type="text" placeholder="Search funds, e.g. parag parikh flexi direct growth" autocomplete="off">
+                <input id="fundSearch" type="text" placeholder="Fund name (e.g. parag parikh flexi direct growth) or scheme code (e.g. 120323)" autocomplete="off">
                 <ul id="searchResults" hidden></ul>
             </div>
             <table class="tbl" id="fundTable">
@@ -287,20 +287,37 @@ import Layout from '../../layouts/Layout.astro';
             </tr>`).join('') || '<tr><td colspan="3" class="small">No funds yet — search above.</td></tr>';
     }
 
+    // mfapi.in's search can be slow or not answer at all, so show progress, give
+    // up after 10s with a clear message, and let a scheme code be looked up directly.
     let searchTimer = null, searchSeq = 0;
+    const NO_MATCH = '<li class="small">No matches — try fewer words, the fund\'s current name (funds get renamed, e.g. ICICI Value Discovery → ICICI Prudential Value Fund), or its AMFI scheme code.</li>';
+    function showResults(html) { $('searchResults').innerHTML = html; $('searchResults').hidden = false; }
+    async function searchFunds(q) {
+        if (/^\d{3,7}$/.test(q)) {
+            const res = await fetch('https://api.mfapi.in/mf/' + q + '/latest', { signal: AbortSignal.timeout(10000) });
+            const body = await res.json();
+            return body && body.meta && body.meta.scheme_name ? [{ schemeCode: body.meta.scheme_code, schemeName: body.meta.scheme_name }] : [];
+        }
+        const res = await fetch('https://api.mfapi.in/mf/search?q=' + encodeURIComponent(q), { signal: AbortSignal.timeout(10000) });
+        return (await res.json()).slice(0, 25);
+    }
     $('fundSearch').addEventListener('input', () => {
         clearTimeout(searchTimer);
         const q = $('fundSearch').value.trim();
         if (q.length < 3) { $('searchResults').hidden = true; return; }
         searchTimer = setTimeout(async () => {
             const seq = ++searchSeq;
+            showResults('<li class="small">Searching…</li>');
             try {
-                const res = await fetch('https://api.mfapi.in/mf/search?q=' + encodeURIComponent(q));
-                const list = (await res.json()).slice(0, 25);
+                const list = await searchFunds(q);
                 if (seq !== searchSeq) return;
-                $('searchResults').innerHTML = list.map((s) => `<li data-code="${esc(s.schemeCode)}" data-name="${esc(s.schemeName)}">${esc(s.schemeName)} <span class="small">${esc(s.schemeCode)}</span></li>`).join('') || '<li class="small">No matches — try fewer words, or the fund\'s current name (funds get renamed, e.g. Axis Bluechip → Axis Large Cap).</li>';
-                $('searchResults').hidden = false;
-            } catch (err) { setMsg($('editorMsg'), 'Fund search failed: ' + err.message, 'err'); }
+                showResults(list.map((s) => `<li data-code="${esc(s.schemeCode)}" data-name="${esc(s.schemeName)}">${esc(s.schemeName)} <span class="small">${esc(s.schemeCode)}</span></li>`).join('') || NO_MATCH);
+            } catch (err) {
+                if (seq !== searchSeq) return;
+                showResults(err.name === 'TimeoutError'
+                    ? '<li class="small">The fund-data service (mfapi.in) is slow right now and didn\'t answer in 10s — edit the text to search again.</li>'
+                    : `<li class="small">Fund search failed (${esc(err.message)}) — edit the text to try again.</li>`);
+            }
         }, 300);
     });
     $('searchResults').addEventListener('click', (e) => {
