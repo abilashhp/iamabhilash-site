@@ -9,6 +9,13 @@ import { fakeKv, fakeMailer } from './fakes.mjs';
 const MASTER = 'abilashhp@gmail.com';
 const SITE = 'https://www.iamabhilash.in';
 
+// NAV source stand-in: scheme 122639 sits 7% below its high.
+const navFetch = async (url) => {
+  const code = url.split('/').pop();
+  const data = code === '122639' ? [{ date: '30-10-2026', nav: '93' }, { date: '01-06-2026', nav: '100' }] : [{ date: '30-10-2026', nav: '50' }];
+  return new Response(JSON.stringify({ data }));
+};
+
 function harness() {
   const env = { MF_KV: fakeKv(), MASTER_EMAIL: MASTER, SITE_URL: SITE };
   const { mailer, sent } = fakeMailer();
@@ -17,7 +24,7 @@ function harness() {
     if (cookie) headers.cookie = cookie;
     if (origin) headers.origin = origin;
     const request = new Request(`${SITE}/api/mf/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    const res = await handle({ request, env, params: { route: path.split('/') } }, { mailer });
+    const res = await handle({ request, env, params: { route: path.split('/') } }, { mailer, fetchImpl: navFetch });
     const setCookie = res.headers.get('set-cookie');
     return { status: res.status, body: await res.json(), cookie: setCookie && setCookie.split(';')[0] };
   }
@@ -133,6 +140,18 @@ test('sign-in codes: 60s between requests, 5 wrong tries, single use after sign-
   const out = await h.call('POST', 'auth/logout', undefined, { cookie });
   assert.match(out.cookie, /^mf_session=$/);
   assert.equal((await h.call('GET', 'portfolios', undefined, { cookie })).status, 401);
+});
+
+test('saving a portfolio emails funds already past a step right away, once', async () => {
+  const h = harness();
+  const master = await h.signIn(MASTER);
+  const before = h.sent.length;
+  const saved = (await h.call('POST', 'portfolios', { name: 'Mine', funds: [{ schemeCode: '122639', schemeName: 'PPFAS Flexi Direct' }, { schemeCode: '100001', schemeName: 'Flat Fund' }] }, { cookie: master })).body.portfolio;
+  const alerts = h.sent.slice(before).filter((m) => /52-week high/.test(m.subject));
+  assert.deepEqual(alerts.map((m) => [m.to[0], m.subject]), [[MASTER, 'PPFAS Flexi Direct is 7.0% below its 52-week high']]);
+  // Saving again (e.g. renaming) doesn't repeat the -5% email.
+  await h.call('POST', 'portfolios', { ...saved, name: 'Renamed' }, { cookie: master });
+  assert.equal(h.sent.slice(before).filter((m) => /52-week high/.test(m.subject)).length, 1);
 });
 
 test('test email goes to the signed-in owner, at most once per 10 minutes', async () => {

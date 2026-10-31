@@ -7,5 +7,5 @@ import { handle } from '../../../mf-alerts/api.js';
 import { createMailer } from '../../../mf-alerts/mail.js';
 
 export function onRequest(context) {
-  return handle(context, { mailer: createMailer(context.env, connect) });
+  return handle({ ...context, waitUntil: (p) => context.waitUntil(p) }, { mailer: createMailer(context.env, connect) });
 }

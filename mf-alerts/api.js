@@ -28,7 +28,10 @@ async function body(request) {
   try { return await request.json(); } catch { throw new HttpError(400, 'Body must be JSON.'); }
 }
 
-export async function handle({ request, env, params }, { mailer }) {
+// waitUntil (from the Pages context) lets work finish after the response; without
+// it (tests) that work is awaited. fetchImpl is for tests.
+export async function handle({ request, env, params, waitUntil }, { mailer, fetchImpl = fetch }) {
+  const background = (promise) => (waitUntil ? waitUntil(promise) : promise);
   if (!env.MF_KV) return json({ error: 'MF alerts are not configured on this deployment (MF_KV binding missing).' }, 503);
   if (!env.MASTER_EMAIL) return json({ error: 'MF alerts are not configured on this deployment (MASTER_EMAIL missing).' }, 503);
   const [resource, sub] = params.route || [];
@@ -85,6 +88,9 @@ export async function handle({ request, env, params }, { mailer }) {
       const schemes = new Set(list.flatMap((x) => x.funds.map((f) => f.schemeCode)));
       if (schemes.size > LIMITS.distinctSchemes) return json({ error: `The site can track up to ${LIMITS.distinctSchemes} distinct schemes across everyone's portfolios (this would make ${schemes.size}).` }, 400);
       await env.MF_KV.put('portfolios', JSON.stringify(list));
+      // Funds already past a step are emailed right away rather than at the next
+      // daily check; steps already emailed aren't repeated.
+      await background(runChecks(env, { owner: user, mailer, fetchImpl, trigger: 'saved' }).catch(() => {}));
       return json({ portfolio: p });
     }
     if (resource === 'portfolios' && method === 'DELETE' && sub) {
@@ -97,11 +103,11 @@ export async function handle({ request, env, params }, { mailer }) {
       return json({ deleted: sub });
     }
     if (resource === 'status' && method === 'GET') {
-      const { results } = await runChecks(env, { dryRun: true, owner: user, trigger: 'status' });
+      const { results } = await runChecks(env, { dryRun: true, owner: user, fetchImpl, trigger: 'status' });
       return json({ results, lastRun: await readJson(env.MF_KV, 'lastRun', null) });
     }
     if (resource === 'run' && method === 'POST') {
-      return json(await runChecks(env, { owner: user, mailer, trigger: 'manual' }));
+      return json(await runChecks(env, { owner: user, mailer, fetchImpl, trigger: 'manual' }));
     }
     if (resource === 'test-email' && method === 'POST' && sub) {
       const p = (await readJson(env.MF_KV, 'portfolios', [])).find((x) => x.id === sub && x.owner === user);

@@ -325,8 +325,11 @@ import Layout from '../../layouts/Layout.astro';
         try {
             await api('portfolios', { method: 'POST', body: JSON.stringify(body) });
             $('editor').hidden = true;
+            setMsg($('appMsg'), 'Saved — checking NAVs; any fund already past a step is being emailed to you now.', 'ok');
+            // The server emails in the background; give it a moment so the status shows "emailed".
+            await new Promise((r) => setTimeout(r, 4000));
             await load();
-            setMsg($('appMsg'), 'Saved.', 'ok');
+            setMsg($('appMsg'), 'Saved. Funds already past a step have been emailed to you.', 'ok');
         } catch (err) { setMsg($('editorMsg'), err.message, 'err'); }
     });
     $('cancelBtn').addEventListener('click', () => { $('editor').hidden = true; });
