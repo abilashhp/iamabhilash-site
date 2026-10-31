@@ -1,6 +1,8 @@
 # Daily mutual fund drawdown check. Deploy from this directory:
 #   npx wrangler deploy
-# Secrets (once): npx wrangler secret put RESEND_API_KEY
+# Secrets (once), kept out of this public repo:
+#   npx wrangler secret put RESEND_API_KEY
+#   npx wrangler secret put ALLOWED_EMAILS   # comma-separated; mail only ever goes to these
 name = "mf-alerts"
 main = "worker.js"
 compatibility_date = "2025-09-01"

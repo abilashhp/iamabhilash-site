@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  drawdownFromHistory, alertLevel, evaluatePortfolio, renderAlertEmail, validatePortfolio, runChecks,
+  drawdownFromHistory, alertLevel, evaluatePortfolio, renderAlertEmail, validatePortfolio, runChecks, allowedEmails,
 } from '../../mf-alerts/core.js';
 
 const DAY = 86400000;
@@ -108,6 +108,15 @@ test('portfolio validation normalizes input and explains problems', () => {
   assert.equal(validatePortfolio({ ...base, id: 'bad id!' }).id, null);
 });
 
+test('recipients must be on ALLOWED_EMAILS when a list is given', () => {
+  const allowed = allowedEmails({ ALLOWED_EMAILS: ' Me@X.com, family@y.in ' });
+  assert.deepEqual([...allowed], ['me@x.com', 'family@y.in']);
+  const base = { name: 'n', funds: [{ schemeCode: '1234' }] };
+  assert.deepEqual(validatePortfolio({ ...base, emails: 'ME@x.com' }, { allowed }).emails, ['me@x.com']);
+  assert.throws(() => validatePortfolio({ ...base, emails: 'me@x.com, stranger@z.com' }, { allowed }), /stranger@z\.com isn't on this site's approved recipient list/);
+  assert.throws(() => validatePortfolio({ ...base, emails: 'me@x.com' }, { allowed: allowedEmails({}) }), /No approved recipients are configured/);
+});
+
 // ---------- Full run against fakes ----------
 function fakeKv(initial = {}) {
   const store = new Map(Object.entries(initial).map(([k, v]) => [k, JSON.stringify(v)]));
@@ -141,7 +150,7 @@ const PORTFOLIOS = [
   { id: 'p2', name: 'Family', emails: ['a@x.com', 'b@x.com'], thresholdPct: 5, funds: [{ schemeCode: '111', schemeName: 'Falling Fund' }] },
   { id: 'p3', name: 'Broken', emails: ['c@x.com'], thresholdPct: 5, funds: [{ schemeCode: '999', schemeName: 'Missing Fund' }] },
 ];
-const ENV = (kv) => ({ MF_KV: kv, RESEND_API_KEY: 'k', MAIL_FROM: 'MF <alerts@iamabhilash.in>', SITE_URL: 'https://www.iamabhilash.in' });
+const ENV = (kv) => ({ MF_KV: kv, RESEND_API_KEY: 'k', MAIL_FROM: 'MF <alerts@iamabhilash.in>', SITE_URL: 'https://www.iamabhilash.in', ALLOWED_EMAILS: 'me@x.com,a@x.com,b@x.com,c@x.com' });
 
 test('a run emails each portfolio with new alerts once, fetches each scheme once, and records state', async () => {
   const kv = fakeKv({ portfolios: PORTFOLIOS });
@@ -192,6 +201,20 @@ test('a failed email keeps the old state so the alert is retried; dry runs write
   const retry = fakeFetch({ 111: [93, 100], 222: [100] });
   await runChecks(ENV(kv), { fetchImpl: retry.impl });
   assert.equal(retry.calls.emails.length, 1);
+});
+
+test('at send time mail goes only to approved addresses; with none approved nothing is sent', async () => {
+  const kv = fakeKv({ portfolios: [PORTFOLIOS[1]] }); // a@x.com, b@x.com
+  const { impl, calls } = fakeFetch({ 111: [93, 100] });
+  await runChecks({ ...ENV(kv), ALLOWED_EMAILS: 'a@x.com' }, { fetchImpl: impl }); // b@ was removed from the list after saving
+  assert.deepEqual(calls.emails.map((e) => e.to), [['a@x.com']]);
+
+  const kv2 = fakeKv({ portfolios: [PORTFOLIOS[1]] });
+  const none = fakeFetch({ 111: [93, 100] });
+  const r = await runChecks({ ...ENV(kv2), ALLOWED_EMAILS: undefined }, { fetchImpl: none.impl });
+  assert.equal(none.calls.emails.length, 0);
+  assert.match(r.summary.errors[0], /none of its addresses are in ALLOWED_EMAILS/);
+  assert.deepEqual(JSON.parse(kv2.store.get('state')), { p2: {} }); // still pending
 });
 
 test('without RESEND_API_KEY nothing is sent and alerts stay pending', async () => {

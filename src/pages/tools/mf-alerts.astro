@@ -2,11 +2,10 @@
 import Layout from '../../layouts/Layout.astro';
 ---
 
-<Layout title="MF Drawdown Alerts — iamabhilash.in" description="Private: mutual fund drawdown alerts." noindex>
+<Layout title="MF Drawdown Alerts — iamabhilash.in" description="Mutual fund drawdown alerts." noindex>
 
 <nav>
     <a href="/tools" class="nav-back">← Tools</a>
-    <button id="lockBtn" class="nav-btn" hidden>Lock</button>
 </nav>
 
 <div class="page">
@@ -15,17 +14,9 @@ import Layout from '../../layouts/Layout.astro';
         <p class="sub">Emails you when a fund's NAV falls a set step (5% by default) below its 52-week high, and again at each further step. Checked daily at 09:00 IST with AMFI NAVs from mfapi.in.</p>
     </header>
 
-    <section id="unlock" class="card">
-        <div class="label">Passphrase</div>
-        <p class="hint">This page is private. The passphrase is kept in this browser until you press Lock.</p>
-        <form id="unlockForm" class="row">
-            <input id="passInput" type="password" autocomplete="current-password" placeholder="Passphrase" required>
-            <button class="btn primary" type="submit">Unlock</button>
-        </form>
-        <p id="unlockMsg" class="msg"></p>
-    </section>
+    <p class="notice">No login yet: anyone with this link can view and change these portfolios. Alerts only ever go to the site's approved email addresses.</p>
 
-    <div id="app" hidden>
+    <div id="app">
         <div class="toolbar">
             <button id="newBtn" class="btn primary">+ New portfolio</button>
             <button id="refreshBtn" class="btn">Refresh NAVs</button>
@@ -64,7 +55,6 @@ import Layout from '../../layouts/Layout.astro';
 
 <script is:inline>
 (() => {
-    const PASS_KEY = 'mfAlerts.passphrase';
     const $ = (id) => document.getElementById(id);
     const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const fmtPct = (n) => (n > 0 ? '-' : '') + Math.abs(n).toFixed(2) + '%';
@@ -76,23 +66,12 @@ import Layout from '../../layouts/Layout.astro';
     async function api(path, opts = {}) {
         const res = await fetch('/api/mf/' + path, {
             ...opts,
-            headers: { 'content-type': 'application/json', 'x-mf-passphrase': localStorage.getItem(PASS_KEY) || '', ...(opts.headers || {}) },
+            headers: { 'content-type': 'application/json', ...(opts.headers || {}) },
         });
         let body = {};
         try { body = await res.json(); } catch { /* non-JSON error page */ }
-        if (res.status === 401) { lock('Wrong passphrase.'); throw new Error('Wrong passphrase.'); }
         if (!res.ok) throw new Error(body.error || body.skipped || `HTTP ${res.status}`);
         return body;
-    }
-
-    function lock(message) {
-        localStorage.removeItem(PASS_KEY);
-        $('app').hidden = true; $('lockBtn').hidden = true; $('unlock').hidden = false;
-        setMsg($('unlockMsg'), message || '', message ? 'err' : '');
-    }
-    async function unlock() {
-        $('unlock').hidden = true; $('app').hidden = false; $('lockBtn').hidden = false;
-        await load();
     }
 
     async function load() {
@@ -104,7 +83,7 @@ import Layout from '../../layouts/Layout.astro';
             portfolios = list.portfolios;
             render(status.lastRun);
             setMsg($('appMsg'), '');
-        } catch (err) { if ($('app').hidden === false) setMsg($('appMsg'), err.message, 'err'); }
+        } catch (err) { setMsg($('appMsg'), err.message, 'err'); }
     }
 
     function statusCell(r, step) {
@@ -236,7 +215,7 @@ import Layout from '../../layouts/Layout.astro';
         if (b.dataset.edit) { openEditor(p); $('editor').scrollIntoView({ behavior: 'smooth' }); }
         if (b.dataset.test) {
             setMsg($('appMsg'), 'Sending test email…');
-            try { await api('test-email/' + encodeURIComponent(p.id), { method: 'POST' }); setMsg($('appMsg'), `Test email sent to ${p.emails.join(', ')}.`, 'ok'); }
+            try { const r = await api('test-email/' + encodeURIComponent(p.id), { method: 'POST' }); setMsg($('appMsg'), `Test email sent to ${r.to.join(', ')}.`, 'ok'); }
             catch (err) { setMsg($('appMsg'), err.message, 'err'); }
         }
         if (b.dataset.del && confirm(`Delete “${p.name}” and its alert history?`)) {
@@ -245,14 +224,7 @@ import Layout from '../../layouts/Layout.astro';
         }
     });
 
-    $('unlockForm').addEventListener('submit', (e) => {
-        e.preventDefault();
-        localStorage.setItem(PASS_KEY, $('passInput').value);
-        $('passInput').value = '';
-        unlock();
-    });
-    $('lockBtn').addEventListener('click', () => lock());
-    if (localStorage.getItem(PASS_KEY)) unlock();
+    load();
 })();
 </script>
 
@@ -263,11 +235,11 @@ import Layout from '../../layouts/Layout.astro';
 nav { display: flex; align-items: center; justify-content: space-between; padding: 0 40px; height: 52px; background: rgba(9,9,11,0.94); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.06); position: sticky; top: 0; z-index: 50; }
 .nav-back { font-size: 0.85rem; color: #a1a1aa; }
 .nav-back:hover { color: #e4e4e7; text-decoration: none; }
-.nav-btn { background: none; border: 1px solid #334155; color: #a1a1aa; border-radius: 6px; padding: 4px 12px; font: inherit; font-size: 0.8rem; cursor: pointer; }
 .page { max-width: 1000px; margin: 0 auto; padding: 40px 24px 80px; }
 .page-hdr { text-align: center; margin-bottom: 28px; }
 h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 8px; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 .sub { color: #a1a1aa; font-size: 0.85rem; max-width: 640px; margin: 0 auto; line-height: 1.6; }
+.notice { font-size: 0.8rem; color: #fcd34d; background: rgba(250,204,21,0.08); border: 1px solid rgba(250,204,21,0.25); border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; }
 .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 20px 22px; margin-bottom: 16px; }
 .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 4px; }
 .hint { font-size: 0.8rem; color: #94a3b8; margin-bottom: 12px; line-height: 1.5; }
@@ -282,7 +254,6 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; colo
 label.full { margin-top: 12px; }
 input { background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; padding: 9px 11px; font: inherit; font-size: 0.875rem; }
 input:focus { outline: none; border-color: #60a5fa; }
-#unlockForm input { flex: 1; min-width: 200px; }
 .btn { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; border-radius: 8px; padding: 9px 14px; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
 .btn:hover { border-color: #60a5fa; }
 .btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }

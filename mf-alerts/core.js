@@ -6,6 +6,10 @@
 // (5% by default): at -5%, again at -10%, -15%…; a fund that recovers to less
 // than one step down re-arms. NAVs come from mfapi.in (AMFI data).
 //
+// There is no login yet, so the site can't be used as an open mail relay:
+// mail only ever goes to addresses in the ALLOWED_EMAILS setting
+// (comma-separated). Without it nothing is sent.
+//
 // KV layout (binding MF_KV):
 //   portfolios  [{ id, name, emails[], thresholdPct, funds: [{ schemeCode, schemeName, units? }] }]
 //   state       { [portfolioId]: { [schemeCode]: { alertedStepPct, drawdownPct, peakNav, peakDate, latestDate, alertedAt } } }
@@ -133,9 +137,12 @@ export function renderAlertEmail(portfolio, alerts, siteUrl) {
 }
 
 const EMAIL_RE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[A-Za-z]{2,}$/;
+export function allowedEmails(env) {
+  return new Set(String(env.ALLOWED_EMAILS || '').split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean));
+}
 // Normalizes and checks a portfolio from the API. Throws Error with a message
-// fit to show the user.
-export function validatePortfolio(input) {
+// fit to show the user. `allowed`: the ALLOWED_EMAILS set; recipients must be in it.
+export function validatePortfolio(input, { allowed } = {}) {
   if (!input || typeof input !== 'object') throw new Error('Expected a portfolio object.');
   const name = String(input.name || '').trim();
   if (!name || name.length > 80) throw new Error('Give the portfolio a name (up to 80 characters).');
@@ -144,6 +151,10 @@ export function validatePortfolio(input) {
   if (!emails.length) throw new Error('Add at least one email address.');
   if (emails.length > LIMITS.emails) throw new Error(`At most ${LIMITS.emails} email addresses per portfolio.`);
   for (const e of emails) if (!EMAIL_RE.test(e) || e.length > 254) throw new Error(`"${e}" doesn't look like an email address.`);
+  if (allowed) {
+    if (!allowed.size) throw new Error('No approved recipients are configured on this site (ALLOWED_EMAILS), so alerts can\'t be saved yet.');
+    for (const e of emails) if (!allowed.has(e)) throw new Error(`${e} isn't on this site's approved recipient list, so it can't receive alerts.`);
+  }
   const thresholdPct = input.thresholdPct === undefined || input.thresholdPct === '' ? DEFAULT_THRESHOLD : Number(input.thresholdPct);
   if (!(thresholdPct >= 1 && thresholdPct <= 50)) throw new Error('Alert step must be between 1% and 50%.');
   const funds = Array.isArray(input.funds) ? input.funds : [];
@@ -217,6 +228,7 @@ export async function runChecks(env, { dryRun = false, fetchImpl = fetch, fetchO
   const state = await readJson(kv, 'state', {});
   const navInfo = await loadNavInfo(portfolios.flatMap((p) => p.funds.map((f) => f.schemeCode)), fetchImpl, fetchOpts);
   const siteUrl = env.SITE_URL || 'https://www.iamabhilash.in';
+  const allowed = allowedEmails(env);
   const results = [];
   const nextState = {};
   for (const p of portfolios) {
@@ -224,8 +236,12 @@ export async function runChecks(env, { dryRun = false, fetchImpl = fetch, fetchO
     const result = { id: p.id, name: p.name, rows, alerts: alerts.map((a) => ({ schemeCode: a.schemeCode, schemeName: a.schemeName, drawdownPct: a.drawdownPct, stepPct: a.stepPct })) };
     nextState[p.id] = ps;
     if (alerts.length && !dryRun) {
+      // Re-checked at send time: the list may have changed since the portfolio was saved.
+      const to = p.emails.filter((e) => allowed.has(e));
       try {
-        result.email = await sendEmail(env, { to: p.emails, ...renderAlertEmail(p, alerts, siteUrl) }, fetchImpl);
+        result.email = to.length
+          ? await sendEmail(env, { to, ...renderAlertEmail(p, alerts, siteUrl) }, fetchImpl)
+          : { skipped: 'none of its addresses are in ALLOWED_EMAILS — email not sent' };
         if (result.email.skipped) nextState[p.id] = state[p.id] || {};
       } catch (err) {
         result.email = { error: err.message };
