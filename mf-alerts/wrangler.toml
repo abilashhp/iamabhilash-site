@@ -16,7 +16,7 @@ crons = ["30 3 * * *"]
 
 [[kv_namespaces]]
 binding = "MF_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "601c8ac2bc454d8286153ae10c7c66ab"
 
 [vars]
 SITE_URL = "https://www.iamabhilash.in"
