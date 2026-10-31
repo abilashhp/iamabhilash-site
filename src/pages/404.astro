@@ -1,0 +1,23 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Page not found — Abhilash H P" description="This page doesn't exist." noindex>
+<main class="nf">
+    <p class="nf-code">404</p>
+    <h1>Page not found</h1>
+    <p class="nf-text">There's nothing at this address. It may have moved, or the link may be mistyped.</p>
+    <div class="nf-links">
+        <a href="/">Home</a>
+        <a href="/tools">Tools</a>
+    </div>
+</main>
+</Layout>
+
+<style>
+.nf { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
+.nf-code { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.1em; color: #8b8b94; }
+h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; color: #fafafa; }
+.nf-text { font-size: 0.95rem; color: #a1a1aa; max-width: 420px; }
+.nf-links { display: flex; gap: 20px; margin-top: 8px; }
+</style>
